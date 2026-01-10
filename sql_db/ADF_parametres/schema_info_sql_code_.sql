@@ -1,0 +1,15 @@
+USE [paragon];
+GO
+
+SELECT 
+    TABLE_SCHEMA AS [Schema],
+    TABLE_NAME AS [Table],
+    COLUMN_NAME AS [Field Name],
+    DATA_TYPE AS [Data Type],
+    CHARACTER_MAXIMUM_LENGTH AS [Max Length],
+    IS_NULLABLE AS [Nullable?],
+    COLUMN_DEFAULT AS [Default Value]
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'claim_line'
+  AND TABLE_SCHEMA = 'dbo'
+ORDER BY ORDINAL_POSITION;
