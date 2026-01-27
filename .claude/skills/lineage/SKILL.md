@@ -1,6 +1,6 @@
 ---
 name: lineage
-description: Update the data warehouse lineage diagram (Gold Views, Silver Tables, Silver SPs)
+description: Update the data warehouse lineage diagram (Gold Views, Silver Tables, Silver SPs, Bronze Tables)
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 argument-hint: "[add/remove/update] [object details]"
@@ -21,7 +21,7 @@ You are helping manage the data warehouse lineage diagram.
 ## Architecture
 
 ```
-Gold Views ──reads──> Silver Tables <──loads── Silver Stored Procedures
+Gold Views ──reads──> Silver Tables <──loads── Silver SPs <──reads── Bronze Tables
 ```
 
 ## Current Objects (as of 2026-01-28)
@@ -59,6 +59,35 @@ Gold Views ──reads──> Silver Tables <──loads── Silver Stored Pro
 | RebateReminders | Load_RebateReminders |
 | Termination_Code | Termination_Code_Load |
 
+### Bronze Tables (51) - Grouped by Category
+
+**Claim Related (5)**
+- claim_line, claim_generalitem, claim_hospitalitem, ClaimDetailGenAndHosp, ClaimDetailsAtService
+
+**Episode Related (3)**
+- episode, episode_diagnosis_procedure, medical_item_icd_10am
+
+**ICD Category Maps (9)**
+- icd_type, icd10_category_map, icd10_d_category_map, icd10_h_category_map, icd10_q_category_map, icd10_r_category_map, icd10_s_category_map, icd10_t_category_map, icd10_z_category_map
+
+**Member Related (11)**
+- memship, person, person_membership, person_20251231, PersonAddressHomePostal, PersonContact, MemberAgent, MemberBranch, MemberCover, MemberGroup, MemberRebate
+
+**Membership Config (6)**
+- Membership_Channel_Budget, Membership_Channel_Map, Membership_Fund_Map, Membership_Product_Budget, Membership_Product_Map, Membership_Termination_Map
+
+**Product & Cover (4)**
+- product, cover, cover_product, termination_code
+
+**Provider Related (5)**
+- provider, provider_number, provider_claim, provider_claim_eclipse, provider_claim_line
+
+**Billing & Security (6)**
+- billing_agent, billing_group, billing_type, payment, security_level, web_security
+
+**Group & Other (2)**
+- group_key_full_by_branch, grouping
+
 ## Task Instructions
 
 When user invokes `/lineage`, follow these steps:
@@ -79,14 +108,17 @@ When user invokes `/lineage`, follow these steps:
    G# = Gold View node
    S# = Silver Table node
    SP# = Stored Procedure node
+   B# = Bronze Table node
 
    G# --> S#      (solid = View reads Table)
    S# -.-> SP#    (dashed = SP loads Table)
+   SP# -.-> B#    (dashed = SP reads Bronze)
 
    Colors:
    - Gold: #ffd700
    - Silver: #c0c0c0
    - SP: #4ecdc4
+   - Bronze: #cd7f32
    - Direct Bronze View: #ffa500
    ```
 
@@ -94,7 +126,9 @@ When user invokes `/lineage`, follow these steps:
 
 ```
 /lineage add Silver table "NewTable" with SP "Load_NewTable"
+/lineage add Bronze table "new_source_table" used by SP "Load_NewTable"
 /lineage remove Silver table "OldTable"
 /lineage update - Gold View "Claim_Val" now also reads "NewTable"
+/lineage update - SP "Load_Claim_Fact" now also reads Bronze "new_table"
 /lineage regenerate from notebooks
 ```
