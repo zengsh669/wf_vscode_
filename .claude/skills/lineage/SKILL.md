@@ -26,16 +26,23 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 
 ## Current Objects (as of 2026-01-28)
 
-### Gold Views (7)
+### Gold Views (14)
 - Claim_Aggr -> Claim_Fact
 - Claim_Val -> Claim_Detail, Product, Hospital_Lookup, Ancillary_Lookup
+- ME_Membership_Joins -> Membership_Group_Key, Product
+- ME_Membership_Terminations -> Membership_Group_Key, Product, Membership_History, Termination_Code
+- ME_Total_Membership -> Membership_Group_Key, Product
+- Membership_Budget -> Membership_Budget
+- Membership_Movement -> Membership_Group_Key, Product
+- Membership_Product_Type -> Membership_Group_Key
+- Membership_Reporting -> Membership_Group_Key, Product, Membership_History, Termination_Code
 - vw_calculated_deficit_amb_levies_output -> calculated_deficit_amb_levies
 - vw_gross_deficit -> abp_details
 - vw_RebateReminders -> RebateReminders
 - vw_RebateLineCheck -> (Direct Bronze)
 - vw_RebateRegistrations -> (Direct Bronze)
 
-### Silver Tables (20) with corresponding SPs
+### Silver Tables (21) with corresponding SPs
 | Table | SP |
 |-------|-----|
 | abp_details | usp_refresh_abp_details |
@@ -58,6 +65,7 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 | provider_claim | usp_Load_provider_claim |
 | RebateReminders | Load_RebateReminders |
 | Termination_Code | Termination_Code_Load |
+| Deceased_Active_Membership | usp_Deceased_Active_Membership |
 
 ## Task Instructions
 
