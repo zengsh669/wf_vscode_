@@ -1,104 +1,148 @@
 ---
 name: qlik2sql
-description: Analyze QlikSense code and translate it to SQL Server (tables, views, stored procedures)
+description: Compare QlikSense code with existing SQL Server objects (SILVER tables/SPs, GOLD views)
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
-argument-hint: "[analyze|translate|full] [file path or paste code in chat]"
+argument-hint: "[file path or paste code in chat]"
 ---
 
-# QlikSense to SQL Server Migration Skill
+# QlikSense to SQL Server Comparison Skill
 
-You are helping migrate QlikSense Apps to SQL Server. The user will provide QlikSense code (either as a file path or pasted directly in chat).
+You are helping verify that QlikSense Apps have been correctly migrated to SQL Server. The user will provide QlikSense code (either as a file path or pasted directly in chat), and you will compare it against existing SQL Server objects.
+
+## SQL Server Object Repositories
+
+The existing SQL Server objects are stored in these regularly updated notebooks:
+
+| Database | Object Types | File Location |
+|----------|--------------|---------------|
+| **SILVER** | Tables, Stored Procedures | `sql_db\DWH_\Database\silver_tbl_sp.ipynb` |
+| **GOLD** | Views | `sql_db\DWH_\Database\gold_view.ipynb` |
 
 ## Workflow
 
 When user invokes `/qlik2sql`, follow these steps in order:
 
-### Step 1: Identify Data Sources
+### Step 1: Analyze QlikSense Code
 
-Analyze the QlikSense code and categorize ALL data sources:
+Identify from the QlikSense code:
 
+**Data Sources:**
 | Source Type | How to Identify | Example |
 |-------------|-----------------|---------|
 | **SQL Server** | `OLEDB CONNECT`, `lib://` with SQL connection | `FROM [lib://DW_Connection/schema.table]` |
 | **QVD File** | `.qvd` extension | `FROM [lib://Data/file.qvd] (qvd)` |
 | **Excel/CSV** | `.xlsx`, `.xls`, `.csv` extension | `FROM [lib://Data/file.xlsx] (ooxml)` |
 | **INLINE Data** | `LOAD * INLINE [...]` | Hardcoded mapping tables |
-| **Web Connector** | `lib://` with REST or web path | `FROM [lib://REST_API/endpoint]` |
 | **Resident Table** | `RESIDENT TableName` | Data from previously loaded QlikSense table |
 
 **Output format:**
 ```
-## 1. Data Sources
+## 1. QlikSense Analysis
 
-| Source Name | Type | Path/Location | SQL Server Equivalent Needed? |
-|-------------|------|---------------|-------------------------------|
-| xxx | QVD | lib://... | Yes - need to trace origin |
-| xxx | INLINE | (in script) | Yes - create mapping table |
-| xxx | SQL Server | lib://... | Already exists |
-```
+### Data Sources
+| Source Name | Type | Path/Location |
+|-------------|------|---------------|
+| xxx | SQL Server | lib://... |
+| xxx | QVD | lib://... |
 
-### Step 2: Identify Output
-
-List what the script produces:
-
-```
-## 2. Output
-
+### Output
 | Output Name | Type | Path/Location |
 |-------------|------|---------------|
 | xxx.qvd | QVD | lib://... |
 ```
 
-### Step 3: Analyze Dependencies
+### Step 2: Search for Corresponding SQL Objects
 
-For QVD sources, note that user needs to:
-- Provide the QlikSense script that generates that QVD, OR
-- Confirm what SQL Server table/view it maps to
+Search the notebook files for matching SQL objects:
 
+1. **Search `silver_tbl_sp.ipynb`** for:
+   - Tables that match QlikSense output (e.g., `fact_claim_data` for `ClaimEpisodeLink.qvd`)
+   - Stored Procedures that replicate the QlikSense logic
+
+2. **Search `gold_view.ipynb`** for:
+   - Views that consume SILVER tables or replicate QlikSense output
+
+**Use Grep to search:**
 ```
-## 3. Dependencies to Resolve
-
-| QVD Source | Status | Action Required |
-|------------|--------|-----------------|
-| xxx.qvd | Unknown | Need source script or SQL mapping |
-```
-
-### Step 4: SQL Server Objects Required
-
-List all objects needed to replicate the QlikSense logic:
-
-```
-## 4. SQL Server Objects Required
-
-### Mapping Tables (from INLINE data)
-| Table Name | Purpose | Columns |
-|------------|---------|---------|
-| dbo.xxx_Mapping | Map xxx to yyy | RangeStart, RangeEnd, Category |
-
-### Source Tables/Views (dependencies)
-| Object Name | Source | Notes |
-|-------------|--------|-------|
-| dbo.xxx | From QVD xxx.qvd | Need to confirm SQL source |
-
-### Output Objects
-| Object Type | Name | Purpose |
-|-------------|------|---------|
-| View/Table | dbo.vw_xxx | Replaces xxx.qvd output |
-| Stored Procedure | dbo.usp_xxx | ETL logic |
+Grep pattern="<table_name_or_sp_name>" path="sql_db\DWH_\Database\silver_tbl_sp.ipynb"
+Grep pattern="<view_name>" path="sql_db\DWH_\Database\gold_view.ipynb"
 ```
 
-### Step 5: Generate SQL Code (only when user confirms dependencies)
+**Output format:**
+```
+## 2. SQL Server Objects Found
 
-When user confirms all dependencies are resolved, generate:
+| QlikSense Output | SQL Object | Type | Location |
+|------------------|------------|------|----------|
+| ClaimEpisodeLink.qvd | SILVER.dbo.fact_claim_data | Table | silver_tbl_sp.ipynb |
+| ClaimEpisodeLink.qvd | SILVER.dbo.sp_LoadFactClaimData | Stored Procedure | silver_tbl_sp.ipynb |
+```
 
-1. **Mapping tables** with INSERT statements for INLINE data
-2. **Stored Procedure** that replicates the QlikSense transformation logic
-3. **View** for the final output (if appropriate)
+### Step 3: Compare Logic
+
+For each matched SQL object, compare:
+
+| Comparison Item | What to Check |
+|-----------------|---------------|
+| **Source Tables** | Are the same tables/views being queried? |
+| **JOIN Logic** | Are JOINs identical (type, conditions)? |
+| **Filter Conditions** | Are WHERE clauses matching? |
+| **Calculations** | Are computed columns using equivalent logic? |
+| **Output Fields** | Do output columns match? |
+| **Aggregations** | Are GROUP BY and aggregations the same? |
+
+**Output format:**
+```
+## 3. Logic Comparison
+
+### Source Tables
+| QlikSense | SQL Server | Match? |
+|-----------|------------|--------|
+| ClaimDetailGenAndHosp | BRONZE.dbo.ClaimDetailGenAndHosp | ✅ |
+
+### JOIN Logic
+| QlikSense | SQL Server | Match? |
+|-----------|------------|--------|
+| JOIN claim_line ON claim_id, claim_line_id | Same | ✅ |
+
+### Filter Conditions
+| Condition | QlikSense | SQL Server | Match? |
+|-----------|-----------|------------|--------|
+| claim_type filter | IN ('Hospital','Medical') | IN ('Hospital','Medical') | ✅ |
+
+### Calculations
+| Calculation | QlikSense | SQL Server | Match? |
+|-------------|-----------|------------|--------|
+| Key generation | CAST + CONVERT | CAST + CONVERT | ✅ |
+
+### Output Fields
+| Field | QlikSense | SQL Server | Match? |
+|-------|-----------|------------|--------|
+| claim_id | ✅ | ✅ | ✅ |
+```
+
+### Step 4: Summary
+
+Provide a final summary:
+
+```
+## 4. Summary
+
+| QlikSense Script | SQL Equivalent | Status |
+|------------------|----------------|--------|
+| xxx.md | SILVER.dbo.sp_xxx → SILVER.dbo.table_xxx | ✅ Fully Matched |
+| yyy.md | Not Found | ❌ Needs Migration |
+
+### Discrepancies Found (if any)
+- List any logic differences
+- List any missing fields
+- List any filter condition mismatches
+```
 
 ## QlikSense to SQL Translation Reference
 
-### Common QlikSense Functions → SQL Equivalents
+For understanding logic equivalence:
 
 | QlikSense | SQL Server |
 |-----------|------------|
@@ -107,59 +151,24 @@ When user confirms all dependencies are resolved, generate:
 | `Mid(field, start, len)` | `SUBSTRING(field, start, len)` |
 | `Upper(field)` | `UPPER(field)` |
 | `Num(field)` | `CAST(field AS INT)` or `TRY_CAST` |
-| `Len(Trim(field))` | `LEN(LTRIM(RTRIM(field)))` |
 | `IF(condition, true, false)` | `CASE WHEN condition THEN true ELSE false END` |
 | `NoConcatenate` | New table (not appending) |
 | `LOAD DISTINCT` | `SELECT DISTINCT` |
 | `RESIDENT Table` | `FROM dbo.Table` |
-| `IntervalMatch` | `BETWEEN` in JOIN or CTE with range logic |
-| `Left Join` | `LEFT JOIN` |
+| `IntervalMatch` | `BETWEEN` in JOIN |
 | `ApplyMap('MapTable', field, default)` | `LEFT JOIN` + `COALESCE` |
-
-### IntervalMatch Translation Pattern
-
-QlikSense:
-```qlik
-RangeMap:
-LOAD * INLINE [RangeStart, RangeEnd, Category
-0, 10, Cat_A
-11, 20, Cat_B];
-
-Left Join IntervalMatch (NumField)
-LOAD RangeStart, RangeEnd RESIDENT RangeMap;
-
-LEFT JOIN (BaseTable)
-LOAD NumField, Category RESIDENT RangeMap;
-```
-
-SQL Server:
-```sql
--- Create mapping table
-CREATE TABLE dbo.RangeMap (
-    RangeStart INT,
-    RangeEnd INT,
-    Category NVARCHAR(100)
-);
-
--- Use in query
-SELECT b.*, m.Category
-FROM BaseTable b
-LEFT JOIN dbo.RangeMap m
-    ON b.NumField BETWEEN m.RangeStart AND m.RangeEnd;
-```
 
 ## Example Usage
 
 ```
-/qlik2sql analyze                    -- Analyze code in current file or chat
-/qlik2sql translate                  -- Generate SQL after dependencies confirmed
-/qlik2sql full path/to/file.md       -- Full analysis and translation
+/qlik2sql path/to/script.md    -- Compare QlikSense script with existing SQL objects
+/qlik2sql                       -- Compare code pasted in chat
 ```
 
 ## Notes
 
-- Always ask user to confirm QVD dependencies before generating final SQL
-- Preserve business logic comments from QlikSense code
-- Use `TRY_CAST` for safer type conversions
-- Consider using CTEs for complex nested LOADs
-- For large INLINE tables, suggest separate reference table in SQL Server
+- Always search BOTH notebook files for complete coverage
+- Note schema prefixes (BRONZE.dbo.xxx for source tables)
+- ORDER BY differences are acceptable (not meaningful for table inserts)
+- CTE vs subquery differences are acceptable (same logic, different syntax)
+- Report any logic discrepancies clearly for user review
