@@ -24,23 +24,24 @@ You are helping manage the data warehouse lineage diagram.
 Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 ```
 
-## Current Objects (as of 2026-01-28)
+## Current Objects (as of 2026-01-29)
 
-### Gold Views (14)
+### Gold Views (15)
 - Claim_Aggr -> Claim_Fact
 - Claim_Val -> Claim_Detail, Product, Hospital_Lookup, Ancillary_Lookup
 - ME_Membership_Joins -> Membership_Group_Key, Product
 - ME_Membership_Terminations -> Membership_Group_Key, Product, Membership_History, Termination_Code
 - ME_Total_Membership -> Membership_Group_Key, Product
-- Membership_Budget -> Membership_Budget
+- Membership_Budget -> Membership_Budget, Product
 - Membership_Movement -> Membership_Group_Key, Product
 - Membership_Product_Type -> Membership_Group_Key
 - Membership_Reporting -> Membership_Group_Key, Product, Membership_History, Termination_Code
 - vw_calculated_deficit_amb_levies_output -> calculated_deficit_amb_levies
 - vw_gross_deficit -> abp_details
-- vw_RebateReminders -> RebateReminders
+- vw_HCS_Claims -> episode_classification, episode_condition_group (+ Bronze tables)
 - vw_RebateLineCheck -> (Direct Bronze)
 - vw_RebateRegistrations -> (Direct Bronze)
+- vw_RebateReminders -> RebateReminders (+ Bronze tables)
 
 ### Silver Tables (21) with corresponding SPs
 | Table | SP |
