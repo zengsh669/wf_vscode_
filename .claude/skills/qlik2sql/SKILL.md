@@ -1,181 +1,207 @@
 ---
 name: qlik2sql
-description: Compare QlikSense code with user-specified SQL Server objects (SILVER tables/SPs, GOLD views)
+description: Compare QlikSense code (in .md file) with SQL Server objects to verify perfect replication
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
-argument-hint: "[file path] [table:xxx] [sp:xxx] [view:xxx]"
+argument-hint: "[qlik_file.md] [view:xxx | table:xxx | sp:xxx]"
 ---
 
 # QlikSense to SQL Server Comparison Skill
 
-You are helping verify that QlikSense Apps have been correctly migrated to SQL Server. The user will provide:
-1. QlikSense code (file path or pasted in chat)
-2. Related SQL object names to compare against
+You are helping verify that QlikSense code has been correctly migrated to SQL Server. Compare the QlikSense code logic with SQL objects to determine if the SQL is a **perfect replication** of the Qlik code.
 
-## SQL Server Object Repositories
+## User Input
 
-| Database | Object Types | File Location |
-|----------|--------------|---------------|
-| **SILVER** | Tables, Stored Procedures | `sql_db\DWH_\Database\silver_tbl_sp.ipynb` |
-| **GOLD** | Views | `sql_db\DWH_\Database\gold_view.ipynb` |
+User will provide:
+1. **QlikSense code file** - a `.md` file containing Qlik script
+2. **SQL object type and name** - one or more of:
+   - `view:object_name` - SQL View
+   - `table:object_name` - SQL Table
+   - `sp:object_name` - Stored Procedure
+
+**Example:**
+```
+/qlik2sql sql_db/DWH_/07_Claim_Dashboard_HCS/cla_dash_hcs.md view:vw_HCS_Claims
+```
 
 ## Workflow
 
-### Step 1: Get User Input
+### Step 1: Read Both Files
 
-Ask the user to provide:
-1. **QlikSense code** - file path or paste in chat
-2. **Related SQL objects** - specify which objects to compare:
-   - `table:object_name` - SILVER table
-   - `sp:object_name` - SILVER stored procedure
-   - `view:object_name` - GOLD view
+1. Read the Qlik `.md` file
+2. Locate and read the SQL file(s) based on user-specified object type:
+   - Views: Search in `sql_db/DWH_/**/vw_*.sql` or `gold_view.ipynb`
+   - Tables: Search in `sql_db/DWH_/**/` or `silver_tbl_sp.ipynb`
+   - SPs: Search in `sql_db/DWH_/**/usp_*.sql` or `silver_tbl_sp.ipynb`
 
-**Example user input:**
-```
-/qlik2sql sql_db/DWH_/03_Clinical.../script.md table:episode_condition_group sp:usp_generate_episode_condition_group
-```
+### Step 2: Analyze Qlik Code Structure
 
-Or user can provide objects in follow-up message:
-```
-table: episode_condition_group, fact_claim_data
-sp: usp_generate_episode_condition_group
-view: vw_claim_summary
-```
+Identify these components from the Qlik script:
 
-### Step 2: Analyze QlikSense Code
+| Component | What to Look For |
+|-----------|------------------|
+| **Mapping Tables** | `Mapping LOAD`, `ApplyMap()` |
+| **Data Sources** | QVD files, SQL tables, Excel files |
+| **JOIN Logic** | `Left Join`, `Inner Join`, `Join` |
+| **Filters** | `WHERE` conditions |
+| **Calculated Fields** | `If()`, `Wildmatch()`, `Match()`, `ApplyMap()` |
+| **Interval Matching** | `IntervalMatch` for cohort grouping |
+| **Resident Loads** | `RESIDENT TableName` |
+| **Inline Tables** | `LOAD * INLINE [...]` |
 
-Identify from the QlikSense code:
+### Step 3: Analyze SQL Code Structure
 
-**Data Sources:**
-| Source Type | How to Identify | Example |
-|-------------|-----------------|---------|
-| **SQL Server** | `OLEDB CONNECT`, `lib://` with SQL connection | `FROM [lib://DW_Connection/schema.table]` |
-| **QVD File** | `.qvd` extension | `FROM [lib://Data/file.qvd] (qvd)` |
-| **Excel/CSV** | `.xlsx`, `.xls`, `.csv` extension | `FROM [lib://Data/file.xlsx] (ooxml)` |
-| **INLINE Data** | `LOAD * INLINE [...]` | Hardcoded mapping tables |
-| **Resident Table** | `RESIDENT TableName` | Data from previously loaded QlikSense table |
+Identify these components from the SQL:
 
-**Output format:**
-```
-## 1. QlikSense Analysis
+| Component | What to Look For |
+|-----------|------------------|
+| **CTEs** | `WITH ... AS` (equivalent to Qlik mapping tables) |
+| **JOINs** | `LEFT JOIN`, `INNER JOIN` |
+| **Filters** | `WHERE` clauses, JOIN conditions |
+| **Calculated Fields** | `CASE WHEN`, `IIF()` |
+| **Interval Matching** | `BETWEEN` in JOIN conditions |
 
-### Data Sources
-| Source Name | Type | Path/Location |
-|-------------|------|---------------|
-| xxx | SQL Server | lib://... |
+### Step 4: Compare Logic - Detailed Checklist
 
-### Output
-| Output Name | Type | Path/Location |
-|-------------|------|---------------|
-| xxx.qvd | QVD | lib://... |
-```
+#### 4.1 Table/Data Source Mapping
 
-### Step 3: Extract Specified SQL Objects
-
-**IMPORTANT:** Only extract the objects specified by the user. Do NOT scan the entire notebook.
-
-Use this bash command to extract specific objects from notebooks:
-
-```bash
-# For SILVER tables/SPs - extract cells containing the object name
-sed 's/},{/}\n{/g' "sql_db/DWH_/Database/silver_tbl_sp.ipynb" | grep -i "<object_name>"
-
-# For GOLD views - extract cells containing the object name
-sed 's/},{/}\n{/g' "sql_db/DWH_/Database/gold_view.ipynb" | grep -i "<object_name>"
-```
-
-**Output format:**
-```
-## 2. SQL Server Objects
-
-### Table: [dbo].[object_name]
-[extracted CREATE TABLE definition]
-
-### Stored Procedure: [dbo].[sp_name]
-[extracted CREATE PROCEDURE definition]
-
-### View: [dbo].[view_name]
-[extracted CREATE VIEW definition]
-```
-
-### Step 4: Compare Logic
-
-For each SQL object, compare with QlikSense:
-
-| Comparison Item | What to Check |
-|-----------------|---------------|
-| **Source Tables** | Are the same tables/views being queried? |
-| **JOIN Logic** | Are JOINs identical (type, conditions)? |
-| **Filter Conditions** | Are WHERE clauses matching? |
-| **Calculations** | Are computed columns using equivalent logic? |
-| **Output Fields** | Do output columns match? |
-| **Aggregations** | Are GROUP BY and aggregations the same? |
-
-**Output format:**
-```
-## 3. Logic Comparison
-
-### Source Tables
-| QlikSense | SQL Server | Match? |
-|-----------|------------|--------|
-| xxx.qvd | BRONZE.dbo.xxx | ✅ |
-
-### Calculations
-| Calculation | QlikSense | SQL Server | Match? |
-|-------------|-----------|------------|--------|
-| Key generation | CAST + CONVERT | CAST + CONVERT | ✅ |
-
-### Output Fields
-| Field | QlikSense | SQL Server | Match? |
-|-------|-----------|------------|--------|
-| claim_id | ✅ | ✅ | ✅ |
-```
-
-### Step 5: Summary
+Create a complete table mapping:
 
 ```
-## 4. Summary
+## Table Mapping
 
-| QlikSense Script | SQL Equivalent | Status |
-|------------------|----------------|--------|
-| xxx.md | SILVER.dbo.sp_xxx → SILVER.dbo.table_xxx | ✅ Fully Matched |
+### Mapping Tables
+| Purpose | Qlik Source | SQL Source |
+|---------|-------------|------------|
+| Item Description | paragonreporting.dbo.item | BRONZE.dbo.item |
 
-### Discrepancies Found (if any)
-- List any logic differences
-- List any missing fields
+### Core Business Tables
+| Purpose | Qlik Source | SQL Source |
+|---------|-------------|------------|
+| Memberships | Paragon_Memberships.qvd | BRONZE.dbo.memship |
+
+### Derived/Generated Tables
+| Purpose | Qlik Source | SQL Source |
+|---------|-------------|------------|
+| Age Cohorts | Inline definition | CTE definition |
+| MasterCalendar | Dynamic generation | (missing/separate view) |
+```
+
+#### 4.2 JOIN Logic Comparison
+
+For each JOIN in Qlik, verify SQL equivalent:
+
+| Qlik JOIN | Qlik Keys | SQL JOIN | SQL Keys | Match? |
+|-----------|-----------|----------|----------|--------|
+| `Left Join (Claims)` | person_id | `LEFT JOIN` | person_id | ? |
+
+**Important:** Qlik auto-joins on ALL matching field names. Verify SQL includes all necessary keys.
+
+#### 4.3 Business Logic Comparison
+
+For complex calculated fields (e.g., Product Group, Hospital Tier):
+
+```
+### Product Group Logic
+Qlik (line XX):
+If(Wildmatch("field", 'A','B'), 'Result1', ...)
+
+SQL (line XX):
+CASE WHEN field IN ('A','B') THEN 'Result1' ... END
+
+Match: Yes/No
+```
+
+#### 4.4 Filter Conditions
+
+| Filter | Qlik | SQL | Match? |
+|--------|------|-----|--------|
+| Paid claims only | `WHERE line_status = 'Paid'` | `WHERE line_status = 'Paid'` | ? |
+| Date filter | `service_date > '01/01/2021'` | `service_date > '2021-01-01'` | ? |
+
+### Step 5: Identify Differences
+
+Categorize any differences found:
+
+#### Critical (Affects Data)
+- Missing JOINs
+- Wrong JOIN keys
+- Missing filter conditions
+- Incorrect business logic
+
+#### Non-Critical (Acceptable)
+- Date format differences (can be ignored if user specifies)
+- ORDER BY differences
+- CTE vs subquery (same logic, different syntax)
+- Column alias differences
+
+#### Missing Features (May Need Separate Implementation)
+- Calendar dimension tables
+- Geographic mapping from Excel files
+- Set Analysis / As-Of Calendar
+
+### Step 6: Verification Queries
+
+Provide SQL queries to verify potential issues:
+
+```sql
+-- Check if key is unique (for JOIN validation)
+SELECT column_name, COUNT(*)
+FROM table_name
+GROUP BY column_name
+HAVING COUNT(*) > 1;
+
+-- Check field name in source table
+SELECT COLUMN_NAME
+FROM DATABASE.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'table_name'
+  AND COLUMN_NAME LIKE '%pattern%';
+```
+
+### Step 7: Final Summary
+
+```
+## Summary
+
+### Replication Status: [100% | XX%]
+
+| Category | Completion |
+|----------|------------|
+| Core Data Logic | XX% |
+| JOIN Logic | XX% |
+| Business Calculations | XX% |
+| Output Fields | XX% |
+
+### Items Requiring Action
+| # | Issue | Severity | Recommendation |
+|---|-------|----------|----------------|
+| 1 | Missing SA Level mapping | Low | Import Excel to DB |
+
+### Conclusion
+[Statement on whether SQL is a perfect replication of Qlik code]
 ```
 
 ## QlikSense to SQL Translation Reference
 
 | QlikSense | SQL Server |
 |-----------|------------|
-| `SubField(field, ',', n)` | `PARSENAME(REPLACE(field, ',', '.'), n)` or STRING_SPLIT |
-| `Left(field, n)` | `LEFT(field, n)` |
-| `Mid(field, start, len)` | `SUBSTRING(field, start, len)` |
-| `Upper(field)` | `UPPER(field)` |
-| `Num(field)` | `CAST(field AS INT)` or `TRY_CAST` |
-| `IF(condition, true, false)` | `CASE WHEN condition THEN true ELSE false END` |
-| `NoConcatenate` | New table (not appending) |
-| `LOAD DISTINCT` | `SELECT DISTINCT` |
-| `RESIDENT Table` | `FROM dbo.Table` |
+| `ApplyMap('Map', field, default)` | `LEFT JOIN` + `ISNULL(col, default)` |
+| `Wildmatch(field, '*pattern*')` | `field LIKE '%pattern%'` |
+| `Wildmatch(field, 'A','B','C')` | `field IN ('A','B','C')` |
+| `Wildmatch(field, 'A*')` | `field LIKE 'A%'` |
+| `Match(field, 'A','B')` | `field IN ('A','B')` |
+| `If(cond, true, false)` | `CASE WHEN cond THEN true ELSE false END` |
 | `IntervalMatch` | `BETWEEN` in JOIN |
-| `ApplyMap('MapTable', field, default)` | `LEFT JOIN` + `COALESCE` |
-
-## Example Usage
-
-```
-# Specify objects inline
-/qlik2sql path/to/script.md table:fact_claim sp:usp_load_claim
-
-# Or provide objects in follow-up
-/qlik2sql path/to/script.md
-> table: episode_condition_group
-> sp: usp_generate_episode_condition_group
-```
+| `Age(date1, date2)` | `DATEDIFF(YEAR,...) - CASE WHEN...` |
+| `Monthname(date)` | `FORMAT(date, 'MMM yyyy')` |
+| `Left Join (Table)` | `LEFT JOIN` (check all matching field names!) |
+| `Join (Table)` | `INNER JOIN` |
+| `RESIDENT Table` | Reference to CTE or temp table |
+| `NoConcatenate` | New result set (not UNION) |
 
 ## Notes
 
-- Only extract objects specified by the user
-- Schema prefix is typically `BRONZE.dbo.xxx` for source, `SILVER.dbo.xxx` for target
-- ORDER BY differences are acceptable
-- CTE vs subquery differences are acceptable (same logic, different syntax)
+- Qlik `Left Join` auto-matches on ALL fields with same name - verify SQL includes all keys
+- Date format differences are usually acceptable (focus on logic, not format)
+- Missing calendar/dimension tables may be implemented separately
+- Always provide verification queries for potential issues
