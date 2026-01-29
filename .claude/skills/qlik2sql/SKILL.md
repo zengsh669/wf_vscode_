@@ -1,18 +1,18 @@
 ---
 name: qlik2sql
-description: Compare QlikSense code with existing SQL Server objects (SILVER tables/SPs, GOLD views)
+description: Compare QlikSense code with user-specified SQL Server objects (SILVER tables/SPs, GOLD views)
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
-argument-hint: "[file path or paste code in chat]"
+argument-hint: "[file path] [table:xxx] [sp:xxx] [view:xxx]"
 ---
 
 # QlikSense to SQL Server Comparison Skill
 
-You are helping verify that QlikSense Apps have been correctly migrated to SQL Server. The user will provide QlikSense code (either as a file path or pasted directly in chat), and you will compare it against existing SQL Server objects.
+You are helping verify that QlikSense Apps have been correctly migrated to SQL Server. The user will provide:
+1. QlikSense code (file path or pasted in chat)
+2. Related SQL object names to compare against
 
 ## SQL Server Object Repositories
-
-The existing SQL Server objects are stored in these regularly updated notebooks:
 
 | Database | Object Types | File Location |
 |----------|--------------|---------------|
@@ -21,9 +21,28 @@ The existing SQL Server objects are stored in these regularly updated notebooks:
 
 ## Workflow
 
-When user invokes `/qlik2sql`, follow these steps in order:
+### Step 1: Get User Input
 
-### Step 1: Analyze QlikSense Code
+Ask the user to provide:
+1. **QlikSense code** - file path or paste in chat
+2. **Related SQL objects** - specify which objects to compare:
+   - `table:object_name` - SILVER table
+   - `sp:object_name` - SILVER stored procedure
+   - `view:object_name` - GOLD view
+
+**Example user input:**
+```
+/qlik2sql sql_db/DWH_/03_Clinical.../script.md table:episode_condition_group sp:usp_generate_episode_condition_group
+```
+
+Or user can provide objects in follow-up message:
+```
+table: episode_condition_group, fact_claim_data
+sp: usp_generate_episode_condition_group
+view: vw_claim_summary
+```
+
+### Step 2: Analyze QlikSense Code
 
 Identify from the QlikSense code:
 
@@ -44,7 +63,6 @@ Identify from the QlikSense code:
 | Source Name | Type | Path/Location |
 |-------------|------|---------------|
 | xxx | SQL Server | lib://... |
-| xxx | QVD | lib://... |
 
 ### Output
 | Output Name | Type | Path/Location |
@@ -52,36 +70,37 @@ Identify from the QlikSense code:
 | xxx.qvd | QVD | lib://... |
 ```
 
-### Step 2: Search for Corresponding SQL Objects
+### Step 3: Extract Specified SQL Objects
 
-Search the notebook files for matching SQL objects:
+**IMPORTANT:** Only extract the objects specified by the user. Do NOT scan the entire notebook.
 
-1. **Search `silver_tbl_sp.ipynb`** for:
-   - Tables that match QlikSense output (e.g., `fact_claim_data` for `ClaimEpisodeLink.qvd`)
-   - Stored Procedures that replicate the QlikSense logic
+Use this bash command to extract specific objects from notebooks:
 
-2. **Search `gold_view.ipynb`** for:
-   - Views that consume SILVER tables or replicate QlikSense output
+```bash
+# For SILVER tables/SPs - extract cells containing the object name
+sed 's/},{/}\n{/g' "sql_db/DWH_/Database/silver_tbl_sp.ipynb" | grep -i "<object_name>"
 
-**Use Grep to search:**
-```
-Grep pattern="<table_name_or_sp_name>" path="sql_db\DWH_\Database\silver_tbl_sp.ipynb"
-Grep pattern="<view_name>" path="sql_db\DWH_\Database\gold_view.ipynb"
+# For GOLD views - extract cells containing the object name
+sed 's/},{/}\n{/g' "sql_db/DWH_/Database/gold_view.ipynb" | grep -i "<object_name>"
 ```
 
 **Output format:**
 ```
-## 2. SQL Server Objects Found
+## 2. SQL Server Objects
 
-| QlikSense Output | SQL Object | Type | Location |
-|------------------|------------|------|----------|
-| ClaimEpisodeLink.qvd | SILVER.dbo.fact_claim_data | Table | silver_tbl_sp.ipynb |
-| ClaimEpisodeLink.qvd | SILVER.dbo.sp_LoadFactClaimData | Stored Procedure | silver_tbl_sp.ipynb |
+### Table: [dbo].[object_name]
+[extracted CREATE TABLE definition]
+
+### Stored Procedure: [dbo].[sp_name]
+[extracted CREATE PROCEDURE definition]
+
+### View: [dbo].[view_name]
+[extracted CREATE VIEW definition]
 ```
 
-### Step 3: Compare Logic
+### Step 4: Compare Logic
 
-For each matched SQL object, compare:
+For each SQL object, compare with QlikSense:
 
 | Comparison Item | What to Check |
 |-----------------|---------------|
@@ -99,17 +118,7 @@ For each matched SQL object, compare:
 ### Source Tables
 | QlikSense | SQL Server | Match? |
 |-----------|------------|--------|
-| ClaimDetailGenAndHosp | BRONZE.dbo.ClaimDetailGenAndHosp | ✅ |
-
-### JOIN Logic
-| QlikSense | SQL Server | Match? |
-|-----------|------------|--------|
-| JOIN claim_line ON claim_id, claim_line_id | Same | ✅ |
-
-### Filter Conditions
-| Condition | QlikSense | SQL Server | Match? |
-|-----------|-----------|------------|--------|
-| claim_type filter | IN ('Hospital','Medical') | IN ('Hospital','Medical') | ✅ |
+| xxx.qvd | BRONZE.dbo.xxx | ✅ |
 
 ### Calculations
 | Calculation | QlikSense | SQL Server | Match? |
@@ -122,9 +131,7 @@ For each matched SQL object, compare:
 | claim_id | ✅ | ✅ | ✅ |
 ```
 
-### Step 4: Summary
-
-Provide a final summary:
+### Step 5: Summary
 
 ```
 ## 4. Summary
@@ -132,17 +139,13 @@ Provide a final summary:
 | QlikSense Script | SQL Equivalent | Status |
 |------------------|----------------|--------|
 | xxx.md | SILVER.dbo.sp_xxx → SILVER.dbo.table_xxx | ✅ Fully Matched |
-| yyy.md | Not Found | ❌ Needs Migration |
 
 ### Discrepancies Found (if any)
 - List any logic differences
 - List any missing fields
-- List any filter condition mismatches
 ```
 
 ## QlikSense to SQL Translation Reference
-
-For understanding logic equivalence:
 
 | QlikSense | SQL Server |
 |-----------|------------|
@@ -161,14 +164,18 @@ For understanding logic equivalence:
 ## Example Usage
 
 ```
-/qlik2sql path/to/script.md    -- Compare QlikSense script with existing SQL objects
-/qlik2sql                       -- Compare code pasted in chat
+# Specify objects inline
+/qlik2sql path/to/script.md table:fact_claim sp:usp_load_claim
+
+# Or provide objects in follow-up
+/qlik2sql path/to/script.md
+> table: episode_condition_group
+> sp: usp_generate_episode_condition_group
 ```
 
 ## Notes
 
-- Always search BOTH notebook files for complete coverage
-- Note schema prefixes (BRONZE.dbo.xxx for source tables)
-- ORDER BY differences are acceptable (not meaningful for table inserts)
+- Only extract objects specified by the user
+- Schema prefix is typically `BRONZE.dbo.xxx` for source, `SILVER.dbo.xxx` for target
+- ORDER BY differences are acceptable
 - CTE vs subquery differences are acceptable (same logic, different syntax)
-- Report any logic discrepancies clearly for user review
