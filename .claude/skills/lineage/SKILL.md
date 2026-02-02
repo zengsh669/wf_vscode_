@@ -24,7 +24,7 @@ You are helping manage the data warehouse lineage diagram.
 Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 ```
 
-## Current Objects (as of 2026-01-29)
+## Current Objects (as of 2026-02-02)
 
 ### Gold Views (15)
 - Claim_Aggr -> Claim_Fact
@@ -38,12 +38,12 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 - Membership_Reporting -> Membership_Group_Key, Product, Membership_History, Termination_Code
 - vw_calculated_deficit_amb_levies_output -> calculated_deficit_amb_levies
 - vw_gross_deficit -> abp_details
-- vw_HCS_Claims -> episode_classification, episode_condition_group (+ Bronze tables)
+- vw_HCS_Claims -> ClaimDetailsAtService_optimised, episode_classification, episode_condition_group (+ Bronze tables)
 - vw_RebateLineCheck -> (Direct Bronze)
 - vw_RebateRegistrations -> (Direct Bronze)
 - vw_RebateReminders -> RebateReminders (+ Bronze tables)
 
-### Silver Tables (21) with corresponding SPs
+### Silver Tables (22) with corresponding SPs
 | Table | SP |
 |-------|-----|
 | abp_details | usp_refresh_abp_details |
@@ -53,6 +53,8 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 | calculated_deficit_amb_levies | usp_load_calculated_deficit_amb_levies |
 | Claim_Detail | Claim_Detail_Load |
 | Claim_Fact | Load_Claim_Fact |
+| ClaimDetailsAtService_optimised | usp_Create_ClaimDetailsAtService_Optimised |
+| Deceased_Active_Membership | usp_Deceased_Active_Membership |
 | episode_classification | usp_Process_Episode_Classification |
 | episode_condition_group | usp_generate_episode_condition_group |
 | etl_episode_work | usp_Load_Episode_Base_Data |
@@ -66,7 +68,6 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs
 | provider_claim | usp_Load_provider_claim |
 | RebateReminders | Load_RebateReminders |
 | Termination_Code | Termination_Code_Load |
-| Deceased_Active_Membership | usp_Deceased_Active_Membership |
 
 ## Task Instructions
 
