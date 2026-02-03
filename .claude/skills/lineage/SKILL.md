@@ -3,7 +3,7 @@ name: lineage
 description: Update the data warehouse lineage diagram (Gold Views, Silver Tables, Silver SPs)
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
-argument-hint: "[add/remove/update] [object details]"
+argument-hint: "[add/remove/update/hcs_claims/full] [object details]"
 ---
 
 # Data Lineage Management Skill
@@ -26,7 +26,7 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
      └──────────────────── (direct access) ─────────────────────────┘
 ```
 
-## Current Objects (as of 2026-02-03)
+## Current Objects (as of 2026-02-04)
 
 ### Gold Views (15)
 - Claim_Aggr -> Claim_Fact
@@ -102,11 +102,26 @@ When user invokes `/lineage`, follow these steps:
    - Analyze SQL to find dependencies (FROM SILVER.dbo.XXX and FROM BRONZE.dbo.XXX)
    - Regenerate the complete lineage HTML
 
-3. **IMPORTANT: Always show updated table at the end of conversation:**
+3. **If user specifies `hcs_claims` filter:**
+   - Generate a filtered lineage showing ONLY these 6 SPs and their dependencies:
+     - usp_Create_ClaimDetailsAtService_Optimised
+     - sp_LoadFactClaimData
+     - usp_Load_ICD_Mapping
+     - usp_Load_Episode_Base_Data
+     - usp_Process_Episode_Classification
+     - usp_generate_episode_condition_group
+   - Related Silver Tables: ClaimDetailsAtService_optimised, fact_claim_data, etl_icd_mapping, etl_episode_work, episode_classification, episode_condition_group
+   - Related Gold View: vw_HCS_Claims
+   - Bronze Tables: Only those used by the 6 SPs (22 tables total)
+
+4. **If user specifies `full` option:**
+   - Restore the complete lineage diagram with all 15 Gold Views, 22 Silver Tables, 22 SPs, and 64 Bronze Tables
+
+5. **IMPORTANT: Always show updated table at the end of conversation:**
    - After any lineage operation (add/remove/update/regenerate), display the updated "Silver Tables with SPs and Bronze Sources" table in the chat
    - This helps user verify the changes immediately
 
-4. **HTML Structure Reference:**
+6. **HTML Structure Reference:**
    ```
    G# = Gold View node
    S# = Silver Table node
@@ -133,7 +148,24 @@ When user invokes `/lineage`, follow these steps:
 /lineage remove Silver table "OldTable"
 /lineage update - Gold View "Claim_Val" now also reads "NewTable"
 /lineage regenerate from notebooks
+/lineage hcs_claims              # Show only 6 HCS Claims SPs lineage
+/lineage full                    # Restore complete lineage (all 22 SPs)
 ```
+
+## HCS Claims Filter Details
+
+When `hcs_claims` option is used, show only these objects:
+
+| SP | Silver Table | Bronze Sources |
+|----|--------------|----------------|
+| usp_Create_ClaimDetailsAtService_Optimised | ClaimDetailsAtService_optimised | claim_line, cover, cover_product, grouping, membership_group, person, plan_detail, product |
+| sp_LoadFactClaimData | fact_claim_data | claim_line, ClaimDetailGenAndHosp |
+| usp_Load_ICD_Mapping | etl_icd_mapping | icd_type |
+| usp_Load_Episode_Base_Data | etl_episode_work | claim_generalitem, claim_hospitalitem, claim_line, claim_line_status_type, ClaimDetailGenAndHosp, episode, episode_diagnosis_procedure, medical_item_icd_10am |
+| usp_Process_Episode_Classification | episode_classification | icd10_category_map, icd10_d/h/q/r/s/t/z_category_map |
+| usp_generate_episode_condition_group | episode_condition_group | (none) |
+
+**Related Gold View:** vw_HCS_Claims (reads ClaimDetailsAtService_optimised, episode_classification, episode_condition_group)
 
 ## Output Format
 
