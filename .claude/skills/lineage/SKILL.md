@@ -1,8 +1,6 @@
 ---
 name: lineage
 description: Update the data warehouse lineage diagram (Gold Views, Silver Tables, Silver SPs)
-disable-model-invocation: true
-allowed-tools: Read, Edit, Write, Bash, Glob, Grep
 argument-hint: "[add/remove/update/hcs_claims/full] [object details]"
 ---
 
