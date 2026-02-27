@@ -24,7 +24,7 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
      └──────────────────── (direct access) ─────────────────────────┘
 ```
 
-## Current Objects (as of 2026-02-18)
+## Current Objects (as of 2026-02-27)
 
 ### Gold Views (16)
 - Claim_Aggr -> Claim_Fact
@@ -34,17 +34,17 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 - Membership_Budget -> Membership_Budget, Product
 - Membership_Movement -> Membership_Group_Key, Product
 - Membership_Product_Type -> Membership_Group_Key
-- Membership_Reporting -> Membership_Group_Key, Product, Membership_History, Termination_Code
+- Membership_Reporting -> Membership_Group_Key, Product, Membership_History, Termination_Code (+ Bronze direct: group_key_full_by_branch)
 - vw_Calculated_Deficit -> ClaimDetailsAtService_optimised (+ Bronze: group_key_full_by_branch, claim_line, claim_hospitalitem, claim_generalitem, person, memship)
 - vw_calculated_deficit_amb_levies_output -> calculated_deficit_amb_levies
-- vw_HCS_Claims -> ClaimDetailsAtService_optimised, episode_classification, episode_condition_group (+ Bronze tables)
-- vw_Membership_Current -> (Direct Bronze: memship, memship_20260130, cover, promotion_reference, person_membership, promotion, promotion_sales_channel, operator, grouping)
+- vw_HCS_Claims -> ClaimDetailsAtService_optimised, episode_classification, episode_condition_group (+ Bronze direct: 18 tables incl. ClaimDetailGenAndHosp, ClaimDetailsAtService, PersonAddressHomePostal, claim_line_status_type, cover_type, fund_classification, item, item_group, memship, person, person_membership, provider, provider_number, provider_type, service_type, etc.)
+- vw_Membership_Current -> (Direct Bronze: memship, memship_20260130, cover, cover_product, promotion_reference, person_membership, product, promotion, promotion_sales_channel, operator, grouping)
 - vw_ovhc -> (Direct Bronze: cover_product, product, cover, memship, memship_app_dep, memship_app_agent, memship_app_sales_promo, promotion_sales_channel, country_code, visa_type, grouping)
 - vw_RebateLineCheck -> (Direct Bronze: memship, MemberRebate, person_membership, person, PersonContact, in_rebate)
-- vw_RebateRegistrations -> (Direct Bronze: MemberRebate, rebate_reg_errors, hic_rebate_error, hic_rebate_segment, hic_rebate_segment_error)
-- vw_RebateReminders -> RebateReminders (+ Bronze tables: person_membership, MemberRebate, MemberBranch, MemberCover, person, PersonContact, web_security)
+- vw_RebateRegistrations -> (Direct Bronze: MemberRebate, hic_rebate_error, hic_rebate_segment, hic_rebate_segment_error, memship, rebate_reg_errors)
+- vw_RebateReminders -> (Direct Bronze ONLY — no longer reads RebateReminders Silver: MemberBranch, MemberCover, MemberRebate, PersonAddressHomePostal, PersonContact, memship, person, person_membership, rebate, rebate_form_flag, web_security)
 
-### Silver Tables (20) with corresponding SPs and Bronze Sources
+### Silver Tables (21) with corresponding SPs and Bronze Sources
 | Table | SP | Bronze Sources |
 |-------|-----|----------------|
 | AgentAgreementStatus | LoadAgentAgreementStatus | grouping |
@@ -54,6 +54,7 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 | Claim_Fact | Load_Claim_Fact | claim_generalitem, claim_hospitalitem, claim_line, cover, cover_product, person, product, provider, provider_number |
 | ClaimDetailsAtService_optimised | usp_Create_ClaimDetailsAtService_Optimised | claim_line, cover, cover_product, grouping, membership_group, person, plan_detail, product |
 | Deceased_Active_Membership | usp_Deceased_Active_Membership | MemberGroup, memship, person, person_membership, security_level |
+| Earned_Contributions | usp_Load_Earned_Contributions | cover, cover_product, group_key_full_by_branch, grouping, memship, memship_app_agent, product, product_fee, receipt, receipt_status |
 | episode_classification | usp_Process_Episode_Classification | icd10_category_map, icd10_d_category_map, icd10_h_category_map, icd10_q_category_map, icd10_r_category_map, icd10_s_category_map, icd10_t_category_map, icd10_z_category_map |
 | episode_condition_group | usp_generate_episode_condition_group | - |
 | etl_episode_work | usp_Load_Episode_Base_Data | ClaimDetailGenAndHosp, claim_generalitem, claim_hospitalitem, claim_line, claim_line_status_type, episode, episode_diagnosis_procedure, medical_item_icd_10am |
@@ -68,7 +69,7 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 | RebateReminders | Load_RebateReminders | MemberRebate, PersonAddressHomePostal, PersonContact, memship, person, person_membership, web_security |
 | Termination_Code | Termination_Code_Load | Membership_Termination_Map, termination_code |
 
-### Bronze Tables (78) by Category
+### Bronze Tables (83) by Category
 
 | Category | Tables |
 |----------|--------|
@@ -80,11 +81,12 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 | Cover Tables | cover, cover_product, cover_type, fund_classification, plan_detail, product |
 | Episode Tables | episode, episode_diagnosis_procedure, medical_item_icd_10am |
 | ICD Mapping | icd10_category_map, icd10_d_category_map, icd10_h_category_map, icd10_q_category_map, icd10_r_category_map, icd10_s_category_map, icd10_t_category_map, icd10_z_category_map, icd_type |
-| Rebate Tables | hic_rebate_error, hic_rebate_segment, hic_rebate_segment_error, in_rebate, rebate_reg_errors |
+| Rebate Tables | hic_rebate_error, hic_rebate_segment, hic_rebate_segment_error, in_rebate, rebate, rebate_form_flag, rebate_reg_errors |
 | Provider Tables | provider, provider_claim, provider_claim_eclipse, provider_claim_line, provider_number, provider_type |
 | OVHC Tables | country_code, memship_app_agent, memship_app_dep, memship_app_sales_promo, promotion_sales_channel, visa_type |
 | Snapshot Tables | memship_20260130, operator, person_, person_20260130, person_membership_, promotion, promotion_reference |
 | Other Tables | group_key_full_by_branch, grouping, item, item_group, security_level, service_type, termination_code, web_security |
+| Financial Tables | product_fee, receipt, receipt_status |
 
 ## Task Instructions
 
