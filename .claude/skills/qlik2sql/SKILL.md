@@ -1,9 +1,9 @@
 ---
 name: qlik2sql
-description: Compare QlikSense code (in .md file) with SQL Server objects to verify perfect replication
+description: Translate or verify QlikSense code (.md file) into SQL Server. First lists all source tables for confirmation, then either generates new SQL from scratch or compares against an existing SQL object.
 disable-model-invocation: true
 allowed-tools: Read, Edit, Write, Bash, Glob, Grep
-argument-hint: "[qlik_file.md] [view:xxx | table:xxx | sp:xxx]"
+argument-hint: "[qlik_file.md] [view:xxx | table:xxx | sp:xxx] (SQL object optional — omit to generate SQL from scratch)"
 ---
 
 # QlikSense to SQL Server Comparison Skill
@@ -26,13 +26,54 @@ User will provide:
 
 ## Workflow
 
-### Step 1: Read Both Files
+### Step 0: Source Table Discovery (Always Run First)
 
 1. Read the Qlik `.md` file
+2. Extract ALL data sources and present them in a table grouped by type:
+
+**SQL Tables** (from `SQL SELECT ... FROM` statements):
+```
+| Table Name | Schema | Database | Role in Script |
+|------------|--------|----------|----------------|
+| memship    | dbo    | paragonreporting | Main membership table |
+```
+
+**QVD Files** (from `FROM [lib://...]`):
+```
+| File Name | Library | Used As |
+|-----------|---------|---------|
+| Paragon_Grouping.qvd | ExtractData (prdqs01_atobi) | GroupMap mapping |
+```
+
+**Other Files** (Excel, CSV, etc.):
+```
+| File Name | Library | Used As |
+|-----------|---------|---------|
+| Sales Channel Mapping.xlsx | Manual Data | SalesChannelMapping |
+```
+
+3. **STOP and ask the user:** "以上是从 Qlik 代码中识别到的所有 source tables，请确认后我再继续。"
+4. Wait for user confirmation before proceeding to Step 1.
+
+---
+
+### Step 1: Read Both Files
+
+1. Read the Qlik `.md` file (already read in Step 0)
 2. Locate and read the SQL file(s) based on user-specified object type:
    - Views: Search in `sql_db/DWH_/**/vw_*.sql` or `gold_view.ipynb`
    - Tables: Search in `sql_db/DWH_/**/` or `silver_tbl_sp.ipynb`
    - SPs: Search in `sql_db/DWH_/**/usp_*.sql` or `silver_tbl_sp.ipynb`
+   - If **no SQL object is provided**, skip to Step 1b to generate SQL from scratch.
+
+### Step 1b: Generate SQL from Scratch (when no SQL object exists yet)
+
+If the user has not provided a SQL object to compare against, write a new SQL view/SP that replicates the Qlik logic:
+
+1. Translate each Qlik `Mapping LOAD` → SQL CTE
+2. Translate each `SQL SELECT` block → SQL FROM/JOIN structure
+3. Translate all calculated fields using the Translation Reference table below
+4. Output the full SQL and ask: "SQL 草稿已生成，请确认后我可以保存到文件。"
 
 ### Step 2: Analyze Qlik Code Structure
 
