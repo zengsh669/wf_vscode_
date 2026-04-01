@@ -12,7 +12,8 @@ You are helping manage the data warehouse lineage diagram.
 
 | File | Purpose |
 |------|---------|
-| `sql_db/DWH_/Database/data_lineage.html` | The lineage visualization (Mermaid.js) |
+| `sql_db/DWH_/Database/data_lineage.html` | The lineage visualization (Mermaid.js flow diagram) |
+| `sql_db/DWH_/Database/data_lineage_table.html` | The lineage as an HTML table ("Data Warehouse Lineage Table - Full") |
 | `sql_db/DWH_/Database/gold_view.ipynb` | Gold Views definitions |
 | `sql_db/DWH_/Database/silver_tbl_sp.ipynb` | Silver Tables & SPs definitions |
 
@@ -24,9 +25,9 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
      └──────────────────── (direct access) ─────────────────────────┘
 ```
 
-## Current Objects (as of 2026-02-27)
+## Current Objects (as of 2026-04-02)
 
-### Gold Views (16)
+### Gold Views (17)
 - Claim_Aggr -> Claim_Fact
 - ME_Membership_Joins -> Membership_Group_Key, Product
 - ME_Membership_Terminations -> Membership_Group_Key, Product, Membership_History, Termination_Code
@@ -38,38 +39,47 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 - vw_Calculated_Deficit -> ClaimDetailsAtService_optimised (+ Bronze: group_key_full_by_branch, claim_line, claim_hospitalitem, claim_generalitem, person, memship)
 - vw_calculated_deficit_amb_levies_output -> calculated_deficit_amb_levies
 - vw_HCS_Claims -> ClaimDetailsAtService_optimised, episode_classification, episode_condition_group (+ Bronze direct: 18 tables incl. ClaimDetailGenAndHosp, ClaimDetailsAtService, PersonAddressHomePostal, claim_line_status_type, cover_type, fund_classification, item, item_group, memship, person, person_membership, provider, provider_number, provider_type, service_type, etc.)
-- vw_Membership_Current -> (Direct Bronze: memship, memship_20260130, cover, cover_product, promotion_reference, person_membership, product, promotion, promotion_sales_channel, operator, grouping)
+- vw_Membership_Current -> (Direct Bronze: memship, memship_20260331, cover, cover_product, promotion_reference, person_membership, product, promotion, promotion_sales_channel, operator, grouping)
 - vw_ovhc -> (Direct Bronze: cover_product, product, cover, memship, memship_app_dep, memship_app_agent, memship_app_sales_promo, promotion_sales_channel, country_code, visa_type, grouping)
 - vw_RebateLineCheck -> (Direct Bronze: memship, MemberRebate, person_membership, person, PersonContact, in_rebate)
 - vw_RebateRegistrations -> (Direct Bronze: MemberRebate, hic_rebate_error, hic_rebate_segment, hic_rebate_segment_error, memship, rebate_reg_errors)
-- vw_RebateReminders -> (Direct Bronze ONLY — no longer reads RebateReminders Silver: MemberBranch, MemberCover, MemberRebate, PersonAddressHomePostal, PersonContact, memship, person, person_membership, rebate, rebate_form_flag, web_security)
+- vw_RebateReminders -> (Direct Bronze ONLY: MemberBranch, MemberCover, MemberRebate, PersonAddressHomePostal, PersonContact, memship, person, person_membership, rebate, rebate_form_flag, web_security)
+- vw_glossary_hierarchy [GOV schema] -> GOV.glossary_full_cleaned
 
-### Silver Tables (21) with corresponding SPs and Bronze Sources
-| Table | SP | Bronze Sources |
-|-------|-----|----------------|
-| AgentAgreementStatus | LoadAgentAgreementStatus | grouping |
-| Ancillary_Lookup | usp_Load_Ancillary_Lookup | claim_line, cover, cover_product |
-| ArrearsReport | Load_ArrearsReportPayroll | MemberAgent, MemberBranch, MemberCover, MemberGroup, billing_group, billing_type, grouping, memship, person, person_membership, security_level, web_security |
-| calculated_deficit_amb_levies | usp_load_calculated_deficit_amb_levies | group_key_full_by_branch |
-| Claim_Fact | Load_Claim_Fact | claim_generalitem, claim_hospitalitem, claim_line, cover, cover_product, person, product, provider, provider_number |
-| ClaimDetailsAtService_optimised | usp_Create_ClaimDetailsAtService_Optimised | claim_line, cover, cover_product, grouping, membership_group, person, plan_detail, product |
-| Deceased_Active_Membership | usp_Deceased_Active_Membership | MemberGroup, memship, person, person_membership, security_level |
-| Earned_Contributions | usp_Load_Earned_Contributions | cover, cover_product, group_key_full_by_branch, grouping, memship, memship_app_agent, product, product_fee, receipt, receipt_status |
-| episode_classification | usp_Process_Episode_Classification | icd10_category_map, icd10_d_category_map, icd10_h_category_map, icd10_q_category_map, icd10_r_category_map, icd10_s_category_map, icd10_t_category_map, icd10_z_category_map |
-| episode_condition_group | usp_generate_episode_condition_group | - |
-| etl_episode_work | usp_Load_Episode_Base_Data | ClaimDetailGenAndHosp, claim_generalitem, claim_hospitalitem, claim_line, claim_line_status_type, episode, episode_diagnosis_procedure, medical_item_icd_10am |
-| etl_icd_mapping | usp_Load_ICD_Mapping | icd_type |
-| fact_claim_data | sp_LoadFactClaimData | claim_generalitem, claim_hospitalitem, claim_line, claim_line_status_type, payee |
-| Hospital_Lookup | usp_Load_Hospital_Lookup | claim_line, cover, cover_product |
-| Membership_Budget | Membership_Budget_Load | Membership_Channel_Budget, Membership_Product_Budget, Membership_Product_Map |
-| Membership_Group_Key | Membership_Group_Key_Load | Membership_Channel_Map, Membership_Fund_Map, group_key_full_by_branch |
-| Membership_History | Membership_History_Load | Membership_Fund_Map, person_20260130, person_, person_membership_ |
-| Product | Product_Load | Membership_Product_Map, product |
-| provider_claim | usp_Load_provider_claim | billing_agent, payment, person, provider_claim, provider_claim_eclipse, provider_claim_line |
-| RebateReminders | Load_RebateReminders | MemberRebate, PersonAddressHomePostal, PersonContact, memship, person, person_membership, web_security |
-| Termination_Code | Termination_Code_Load | Membership_Termination_Map, termination_code |
+### Silver Tables (29) with corresponding SPs and Bronze Sources
+| Table | SP | Silver Inputs | Bronze Sources |
+|-------|-----|---------------|----------------|
+| AgentAgreementStatus | LoadAgentAgreementStatus | - | grouping |
+| Ancillary_Lookup | usp_Load_Ancillary_Lookup | - | claim_line, cover, cover_product |
+| ArrearsReport | Load_ArrearsReportPayroll | - | MemberAgent, MemberBranch, MemberCover, MemberGroup, billing_group, billing_type, grouping, memship, person, person_membership, security_level, web_security |
+| calculated_deficit_amb_levies | usp_load_calculated_deficit_amb_levies | - | group_key_full_by_branch |
+| Claim_Fact | Load_Claim_Fact | - | claim_generalitem, claim_hospitalitem, claim_line, cover, cover_product, person, product, provider, provider_number |
+| ClaimDetailsAtService_optimised | usp_Create_ClaimDetailsAtService_Optimised | - | claim_line, cover, cover_product, grouping, membership_group, person, plan_detail, product |
+| Current_Product_Fee | usp_Load_Current_Product_Fee | - | product_fee |
+| Deceased_Active_Membership | usp_Deceased_Active_Membership | - | MemberGroup, memship, person, person_membership, security_level |
+| Earned_Contributions | usp_Load_Earned_Contributions | - | cover, cover_product, group_key_full_by_branch, grouping, memship, memship_app_agent, product, product_fee, receipt, receipt_status |
+| episode_classification | usp_Process_Episode_Classification | etl_episode_work | icd10_category_map, icd10_d/h/q/r/s/t/z_category_map |
+| episode_condition_group | usp_generate_episode_condition_group | episode_classification | - |
+| etl_episode_work | usp_Load_Episode_Base_Data | etl_icd_mapping, fact_claim_data | ClaimDetailGenAndHosp, claim_generalitem, claim_hospitalitem, claim_line, claim_line_status_type, episode, episode_diagnosis_procedure, medical_item_icd_10am |
+| etl_icd_mapping | usp_Load_ICD_Mapping | - | icd_type |
+| fact_claim_data | sp_LoadFactClaimData | - | claim_generalitem, claim_hospitalitem, claim_line, claim_line_status_type, payee |
+| Hospital_Lookup | usp_Load_Hospital_Lookup | - | claim_line, cover, cover_product |
+| Latest_Promo_Sales_Channel_By_Person | usp_Load_Latest_Promo_Sales_Channel_By_Person | - | memship, operator, person_membership, promotion, promotion_reference, promotion_sales_channel |
+| Member_Products | usp_Load_Member_Products | Current_Product_Fee | cover, cover_product, product |
+| Membership_Budget | Membership_Budget_Load | - | Membership_Channel_Budget, Membership_Product_Budget, Membership_Product_Map |
+| Membership_Group_Key | Membership_Group_Key_Load | - | Membership_Channel_Map, Membership_Fund_Map, group_key_full_by_branch |
+| Membership_History | Membership_History_Load | - | Membership_Fund_Map, person_20260331, person_, person_membership_ |
+| Product | Product_Load | - | Membership_Product_Map, product |
+| Product_Premium | usp_Load_Product_Premium | Member_Products | - |
+| provider_claim | usp_Load_provider_claim | - | billing_agent, payment, person, provider_claim, provider_claim_eclipse, provider_claim_line |
+| RebateReminders | Load_RebateReminders | - | MemberBranch, MemberCover, MemberRebate, PersonAddressHomePostal, PersonContact, memship, person, person_membership, rebate, rebate_form_flag, web_security |
+| Retained_Member | usp_Load_Retained_Member | - | MemberBranch, MemberCover, PersonContact, cover, cover_product, memship, note, operator, person_membership, product, product_fee, promotion, promotion_reference, promotion_sales_channel, sub_ref_type |
+| Retention_Tasklist | usp_Load_Retention_Tasklist | - | grouping, memship, memship_status, memship_tasklist |
+| Termination_Code | Termination_Code_Load | - | Membership_Termination_Map, termination_code |
+| GOV.glossary_cleaned | usp_Load_GOV_Glossary_Cleaned | - | Westfund_Enterprise_Glossary |
+| GOV.glossary_full_cleaned | usp_Load_GOV_Glossary_Full_Cleaned | - | Westfund_Enterprise_Glossary |
 
-### Bronze Tables (83) by Category
+### Bronze Tables (88) by Category
 
 | Category | Tables |
 |----------|--------|
@@ -84,9 +94,11 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 | Rebate Tables | hic_rebate_error, hic_rebate_segment, hic_rebate_segment_error, in_rebate, rebate, rebate_form_flag, rebate_reg_errors |
 | Provider Tables | provider, provider_claim, provider_claim_eclipse, provider_claim_line, provider_number, provider_type |
 | OVHC Tables | country_code, memship_app_agent, memship_app_dep, memship_app_sales_promo, promotion_sales_channel, visa_type |
-| Snapshot Tables | memship_20260130, operator, person_, person_20260130, person_membership_, promotion, promotion_reference |
+| Snapshot Tables | memship_20260331, operator, person_, person_20260331, person_membership_, promotion, promotion_reference |
 | Other Tables | group_key_full_by_branch, grouping, item, item_group, security_level, service_type, termination_code, web_security |
 | Financial Tables | product_fee, receipt, receipt_status |
+| Retention Tables | memship_status, memship_tasklist, note, sub_ref_type |
+| GOV Tables | Westfund_Enterprise_Glossary |
 
 ## Task Instructions
 
@@ -101,7 +113,10 @@ When user invokes `/lineage`, follow these steps:
 2. **If user wants to regenerate from notebooks:**
    - Extract objects from `gold_view.ipynb` and `silver_tbl_sp.ipynb`
    - Analyze SQL to find dependencies (FROM SILVER.dbo.XXX and FROM BRONZE.dbo.XXX)
-   - Regenerate the complete lineage HTML
+   - **IMPORTANT: Always update BOTH HTML files:**
+     - `data_lineage.html` — Mermaid.js flow diagram
+     - `data_lineage_table.html` — HTML table view
+   - Update this SKILL.md with the latest object counts and lists
 
 3. **If user specifies `hcs_claims` filter:**
    - Generate a filtered lineage showing ONLY these 6 SPs and their dependencies:
@@ -116,7 +131,7 @@ When user invokes `/lineage`, follow these steps:
    - Bronze Tables: Only those used by the 6 SPs (22 tables total)
 
 4. **If user specifies `full` option:**
-   - Restore the complete lineage diagram with all 16 Gold Views, 20 Silver Tables, 20 SPs, and 78 Bronze Tables
+   - Restore the complete lineage diagram with all 17 Gold Views, 29 Silver Tables, 29 SPs, and 88 Bronze Tables
 
 5. **IMPORTANT: Always show updated table at the end of conversation:**
    - After any lineage operation (add/remove/update/regenerate), display the updated "Silver Tables with SPs and Bronze Sources" table in the chat
