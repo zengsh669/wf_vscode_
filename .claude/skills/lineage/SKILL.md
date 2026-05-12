@@ -6,6 +6,8 @@ argument-hint: "[add/remove/update/hcs_claims/full] [object details]"
 
 # Data Lineage Management Skill
 
+**语言要求（强制）：与用户的所有沟通必须使用简体中文。禁止使用韩文、日文或其他语言。**
+
 You are helping manage the data warehouse lineage diagram.
 
 ## Key Files
