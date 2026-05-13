@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Warehouse Lineage - Full</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { text-align: center; color: #ffd700; margin-bottom: 10px; font-size: 2em; }
+        h2 { text-align: center; color: #c0c0c0; margin-bottom: 30px; font-weight: normal; font-size: 1em; }
+        .container { max-width: 2500px; margin: 0 auto; }
+        .legend { display: flex; justify-content: center; gap: 30px; margin-bottom: 20px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 8px; color: #fff; font-size: 14px; }
+        .legend-color { width: 20px; height: 20px; border-radius: 4px; }
+        .gold   { background: linear-gradient(135deg, #ffd700, #ffed4a); }
+        .orange { background: linear-gradient(135deg, #ffa500, #ff8c00); }
+        .silver { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); }
+        .sp     { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
+        .bronze { background: linear-gradient(135deg, #cd7f32, #b87333); }
+        .mermaid {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow-x: auto;
+        }
+        .note { text-align: center; color: #888; margin-top: 20px; font-size: 12px; }
+        .stats { display: flex; justify-content: center; gap: 40px; margin-bottom: 20px; color: #fff; }
+        .stat-item { text-align: center; }
+        .stat-number { font-size: 2em; font-weight: bold; }
+        .stat-label { font-size: 0.9em; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Data Warehouse Lineage - Full</h1>
+        <h2>Complete: 17 Gold Views, 29 Silver Tables, 29 SPs, 88 Bronze Tables</h2>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number" style="color: #ffd700;">17</div>
+                <div class="stat-label">Gold Views</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" style="color: #c0c0c0;">29</div>
+                <div class="stat-label">Silver Tables</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" style="color: #4ecdc4;">29</div>
+                <div class="stat-label">Silver SPs</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" style="color: #cd7f32;">88</div>
+                <div class="stat-label">Bronze Tables</div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color gold"></div><span>Gold Views (via Silver)</span></div>
+            <div class="legend-item"><div class="legend-color orange"></div><span>Gold Views (Direct Bronze only)</span></div>
+            <div class="legend-item"><div class="legend-color silver"></div><span>Silver Tables</span></div>
+            <div class="legend-item"><div class="legend-color sp"></div><span>Silver Stored Procedures</span></div>
+            <div class="legend-item"><div class="legend-color bronze"></div><span>Bronze Tables</span></div>
+        </div>
+
+        <div class="mermaid">
+flowchart LR
+    subgraph GOLD["GOLD Database"]
+        direction TB
+        G1["Claim_Aggr"]
+        G2["ME_Membership_Joins"]
+        G3["ME_Membership_Terminations"]
+        G4["ME_Total_Membership"]
+        G5["Membership_Budget"]
+        G6["Membership_Movement"]
+        G7["Membership_Product_Type"]
+        G8["Membership_Reporting"]
+        G9["vw_Calculated_Deficit"]
+        G10["vw_calculated_deficit_amb_levies_output"]
+        G11["vw_HCS_Claims"]
+        G12["vw_Membership_Current"]
+        G13["vw_ovhc"]
+        G14["vw_RebateLineCheck"]
+        G15["vw_RebateRegistrations"]
+        G16["vw_RebateReminders"]
+        G17["vw_glossary_hierarchy"]
+    end
+
+    subgraph SILVER_T["SILVER Database - Tables"]
+        direction TB
+        S1["AgentAgreementStatus"]
+        S2["Ancillary_Lookup"]
+        S3["ArrearsReport"]
+        S4["calculated_deficit_amb_levies"]
+        S5["Claim_Fact"]
+        S6["ClaimDetailsAtService_optimised"]
+        S7["Current_Product_Fee"]
+        S8["Deceased_Active_Membership"]
+        S9["Earned_Contributions"]
+        S10["episode_classification"]
+        S11["episode_condition_group"]
+        S12["etl_episode_work"]
+        S13["etl_icd_mapping"]
+        S14["fact_claim_data"]
+        S15["Hospital_Lookup"]
+        S16["Latest_Promo_Sales_Channel_By_Person"]
+        S17["Member_Products"]
+        S18["Membership_Budget"]
+        S19["Membership_Group_Key"]
+        S20["Membership_History"]
+        S21["Product"]
+        S22["Product_Premium"]
+        S23["provider_claim"]
+        S24["RebateReminders"]
+        S25["Retained_Member"]
+        S26["Retention_Tasklist"]
+        S27["Termination_Code"]
+        S28["GOV.glossary_cleaned"]
+        S29["GOV.glossary_full_cleaned"]
+    end
+
+    subgraph SILVER_SP["SILVER Database - Stored Procedures"]
+        direction TB
+        SP1["LoadAgentAgreementStatus"]
+        SP2["usp_Load_Ancillary_Lookup"]
+        SP3["Load_ArrearsReportPayroll"]
+        SP4["usp_load_calculated_deficit_amb_levies"]
+        SP5["Load_Claim_Fact"]
+        SP6["usp_Create_ClaimDetailsAtService_Optimised"]
+        SP7["usp_Load_Current_Product_Fee"]
+        SP8["usp_Deceased_Active_Membership"]
+        SP9["usp_Load_Earned_Contributions"]
+        SP10["usp_Process_Episode_Classification"]
+        SP11["usp_generate_episode_condition_group"]
+        SP12["usp_Load_Episode_Base_Data"]
+        SP13["usp_Load_ICD_Mapping"]
+        SP14["sp_LoadFactClaimData"]
+        SP15["usp_Load_Hospital_Lookup"]
+        SP16["usp_Load_Latest_Promo_Sales_Channel_By_Person"]
+        SP17["usp_Load_Member_Products"]
+        SP18["Membership_Budget_Load"]
+        SP19["Membership_Group_Key_Load"]
+        SP20["Membership_History_Load"]
+        SP21["Product_Load"]
+        SP22["usp_Load_Product_Premium"]
+        SP23["usp_Load_provider_claim"]
+        SP24["Load_RebateReminders"]
+        SP25["usp_Load_Retained_Member"]
+        SP26["usp_Load_Retention_Tasklist"]
+        SP27["Termination_Code_Load"]
+        SP28["usp_Load_GOV_Glossary_Cleaned"]
+        SP29["usp_Load_GOV_Glossary_Full_Cleaned"]
+    end
+
+    subgraph BRONZE["BRONZE Database"]
+        direction TB
+        B1["ClaimDetailGenAndHosp"]
+        B2["ClaimDetailsAtService"]
+        B3["MemberAgent"]
+        B4["MemberBranch"]
+        B5["MemberCover"]
+        B6["MemberGroup"]
+        B7["MemberRebate"]
+        B8["Membership_Channel_Budget"]
+        B9["Membership_Channel_Map"]
+        B10["Membership_Fund_Map"]
+        B11["Membership_Product_Budget"]
+        B12["Membership_Product_Map"]
+        B13["Membership_Termination_Map"]
+        B14["PersonAddressHomePostal"]
+        B15["PersonContact"]
+        B16["Westfund_Enterprise_Glossary"]
+        B17["billing_agent"]
+        B18["billing_group"]
+        B19["billing_type"]
+        B20["claim_generalitem"]
+        B21["claim_hospitalitem"]
+        B22["claim_line"]
+        B23["claim_line_status_type"]
+        B24["country_code"]
+        B25["cover"]
+        B26["cover_product"]
+        B27["cover_type"]
+        B28["episode"]
+        B29["episode_diagnosis_procedure"]
+        B30["fund_classification"]
+        B31["group_key_full_by_branch"]
+        B32["grouping"]
+        B33["hic_rebate_error"]
+        B34["hic_rebate_segment"]
+        B35["hic_rebate_segment_error"]
+        B36["icd10_category_map"]
+        B37["icd10_d_category_map"]
+        B38["icd10_h_category_map"]
+        B39["icd10_q_category_map"]
+        B40["icd10_r_category_map"]
+        B41["icd10_s_category_map"]
+        B42["icd10_t_category_map"]
+        B43["icd10_z_category_map"]
+        B44["icd_type"]
+        B45["in_rebate"]
+        B46["item"]
+        B47["item_group"]
+        B48["medical_item_icd_10am"]
+        B49["membership_group"]
+        B50["memship"]
+        B51["memship_20260331"]
+        B52["memship_app_agent"]
+        B53["memship_app_dep"]
+        B54["memship_app_sales_promo"]
+        B55["memship_status"]
+        B56["memship_tasklist"]
+        B57["note"]
+        B58["operator"]
+        B59["payee"]
+        B60["payment"]
+        B61["person"]
+        B62["person_"]
+        B63["person_20260331"]
+        B64["person_membership"]
+        B65["person_membership_"]
+        B66["plan_detail"]
+        B67["product"]
+        B68["product_fee"]
+        B69["promotion"]
+        B70["promotion_reference"]
+        B71["promotion_sales_channel"]
+        B72["provider"]
+        B73["provider_claim"]
+        B74["provider_claim_eclipse"]
+        B75["provider_claim_line"]
+        B76["provider_number"]
+        B77["provider_type"]
+        B78["rebate"]
+        B79["rebate_form_flag"]
+        B80["rebate_reg_errors"]
+        B81["receipt"]
+        B82["receipt_status"]
+        B83["security_level"]
+        B84["service_type"]
+        B85["sub_ref_type"]
+        B86["termination_code"]
+        B87["visa_type"]
+        B88["web_security"]
+    end
+
+    G1 --> S5
+    G2 --> S19
+    G2 --> S21
+    G3 --> S19
+    G3 --> S20
+    G3 --> S21
+    G3 --> S27
+    G4 --> S19
+    G4 --> S21
+    G5 --> S18
+    G5 --> S21
+    G6 --> S19
+    G6 --> S21
+    G7 --> S19
+    G8 --> S19
+    G8 --> S20
+    G8 --> S21
+    G8 --> S27
+    G8 -.-> B31
+    G9 --> S6
+    G9 -.-> B20
+    G9 -.-> B21
+    G9 -.-> B22
+    G9 -.-> B31
+    G9 -.-> B50
+    G9 -.-> B61
+    G10 --> S4
+    G11 --> S6
+    G11 --> S10
+    G11 --> S11
+    G11 -.-> B1
+    G11 -.-> B2
+    G11 -.-> B14
+    G11 -.-> B20
+    G11 -.-> B21
+    G11 -.-> B22
+    G11 -.-> B23
+    G11 -.-> B27
+    G11 -.-> B30
+    G11 -.-> B46
+    G11 -.-> B47
+    G11 -.-> B50
+    G11 -.-> B61
+    G11 -.-> B64
+    G11 -.-> B72
+    G11 -.-> B76
+    G11 -.-> B77
+    G11 -.-> B84
+    G12 -.-> B25
+    G12 -.-> B26
+    G12 -.-> B32
+    G12 -.-> B50
+    G12 -.-> B51
+    G12 -.-> B58
+    G12 -.-> B64
+    G12 -.-> B67
+    G12 -.-> B69
+    G12 -.-> B70
+    G12 -.-> B71
+    G13 -.-> B24
+    G13 -.-> B25
+    G13 -.-> B26
+    G13 -.-> B32
+    G13 -.-> B50
+    G13 -.-> B52
+    G13 -.-> B53
+    G13 -.-> B54
+    G13 -.-> B67
+    G13 -.-> B71
+    G13 -.-> B87
+    G14 -.-> B7
+    G14 -.-> B15
+    G14 -.-> B45
+    G14 -.-> B50
+    G14 -.-> B61
+    G14 -.-> B64
+    G15 -.-> B7
+    G15 -.-> B33
+    G15 -.-> B34
+    G15 -.-> B35
+    G15 -.-> B50
+    G15 -.-> B80
+    G16 -.-> B4
+    G16 -.-> B5
+    G16 -.-> B7
+    G16 -.-> B14
+    G16 -.-> B15
+    G16 -.-> B50
+    G16 -.-> B61
+    G16 -.-> B64
+    G16 -.-> B78
+    G16 -.-> B79
+    G16 -.-> B88
+    G17 --> S29
+    S1 -.-> SP1
+    SP1 -.-> B32
+    S2 -.-> SP2
+    SP2 -.-> B22
+    SP2 -.-> B25
+    SP2 -.-> B26
+    S3 -.-> SP3
+    SP3 -.-> B3
+    SP3 -.-> B4
+    SP3 -.-> B5
+    SP3 -.-> B6
+    SP3 -.-> B18
+    SP3 -.-> B19
+    SP3 -.-> B32
+    SP3 -.-> B50
+    SP3 -.-> B61
+    SP3 -.-> B64
+    SP3 -.-> B83
+    SP3 -.-> B88
+    S4 -.-> SP4
+    SP4 -.-> B31
+    S5 -.-> SP5
+    SP5 -.-> B20
+    SP5 -.-> B21
+    SP5 -.-> B22
+    SP5 -.-> B25
+    SP5 -.-> B26
+    SP5 -.-> B61
+    SP5 -.-> B67
+    SP5 -.-> B72
+    SP5 -.-> B76
+    S6 -.-> SP6
+    SP6 -.-> B22
+    SP6 -.-> B25
+    SP6 -.-> B26
+    SP6 -.-> B32
+    SP6 -.-> B49
+    SP6 -.-> B61
+    SP6 -.-> B66
+    SP6 -.-> B67
+    S7 -.-> SP7
+    SP7 -.-> B68
+    S8 -.-> SP8
+    SP8 -.-> B6
+    SP8 -.-> B50
+    SP8 -.-> B61
+    SP8 -.-> B64
+    SP8 -.-> B83
+    S9 -.-> SP9
+    SP9 -.-> B25
+    SP9 -.-> B26
+    SP9 -.-> B31
+    SP9 -.-> B32
+    SP9 -.-> B50
+    SP9 -.-> B52
+    SP9 -.-> B67
+    SP9 -.-> B68
+    SP9 -.-> B81
+    SP9 -.-> B82
+    S10 -.-> SP10
+    SP10 -.-> B36
+    SP10 -.-> B37
+    SP10 -.-> B38
+    SP10 -.-> B39
+    SP10 -.-> B40
+    SP10 -.-> B41
+    SP10 -.-> B42
+    SP10 -.-> B43
+    SP10 -.-> S12
+    S11 -.-> SP11
+    SP11 -.-> S10
+    S12 -.-> SP12
+    SP12 -.-> B1
+    SP12 -.-> B20
+    SP12 -.-> B21
+    SP12 -.-> B22
+    SP12 -.-> B23
+    SP12 -.-> B28
+    SP12 -.-> B29
+    SP12 -.-> B48
+    SP12 -.-> S13
+    SP12 -.-> S14
+    S13 -.-> SP13
+    SP13 -.-> B44
+    S14 -.-> SP14
+    SP14 -.-> B20
+    SP14 -.-> B21
+    SP14 -.-> B22
+    SP14 -.-> B23
+    SP14 -.-> B59
+    S15 -.-> SP15
+    SP15 -.-> B22
+    SP15 -.-> B25
+    SP15 -.-> B26
+    S16 -.-> SP16
+    SP16 -.-> B50
+    SP16 -.-> B58
+    SP16 -.-> B64
+    SP16 -.-> B69
+    SP16 -.-> B70
+    SP16 -.-> B71
+    S17 -.-> SP17
+    SP17 -.-> B25
+    SP17 -.-> B26
+    SP17 -.-> B67
+    SP17 -.-> S7
+    S18 -.-> SP18
+    SP18 -.-> B8
+    SP18 -.-> B11
+    SP18 -.-> B12
+    S19 -.-> SP19
+    SP19 -.-> B9
+    SP19 -.-> B10
+    SP19 -.-> B31
+    S20 -.-> SP20
+    SP20 -.-> B10
+    SP20 -.-> B62
+    SP20 -.-> B63
+    SP20 -.-> B65
+    S21 -.-> SP21
+    SP21 -.-> B12
+    SP21 -.-> B67
+    S22 -.-> SP22
+    SP22 -.-> S17
+    S23 -.-> SP23
+    SP23 -.-> B17
+    SP23 -.-> B60
+    SP23 -.-> B61
+    SP23 -.-> B73
+    SP23 -.-> B74
+    SP23 -.-> B75
+    S24 -.-> SP24
+    SP24 -.-> B4
+    SP24 -.-> B5
+    SP24 -.-> B7
+    SP24 -.-> B14
+    SP24 -.-> B15
+    SP24 -.-> B50
+    SP24 -.-> B61
+    SP24 -.-> B64
+    SP24 -.-> B78
+    SP24 -.-> B79
+    SP24 -.-> B88
+    S25 -.-> SP25
+    SP25 -.-> B4
+    SP25 -.-> B5
+    SP25 -.-> B15
+    SP25 -.-> B25
+    SP25 -.-> B26
+    SP25 -.-> B50
+    SP25 -.-> B57
+    SP25 -.-> B58
+    SP25 -.-> B64
+    SP25 -.-> B67
+    SP25 -.-> B68
+    SP25 -.-> B69
+    SP25 -.-> B70
+    SP25 -.-> B71
+    SP25 -.-> B85
+    S26 -.-> SP26
+    SP26 -.-> B32
+    SP26 -.-> B50
+    SP26 -.-> B55
+    SP26 -.-> B56
+    S27 -.-> SP27
+    SP27 -.-> B13
+    SP27 -.-> B86
+    S28 -.-> SP28
+    SP28 -.-> B16
+    S29 -.-> SP29
+    SP29 -.-> B16
+
+    style G1 fill:#ffd700,color:#000
+    style G2 fill:#ffd700,color:#000
+    style G3 fill:#ffd700,color:#000
+    style G4 fill:#ffd700,color:#000
+    style G5 fill:#ffd700,color:#000
+    style G6 fill:#ffd700,color:#000
+    style G7 fill:#ffd700,color:#000
+    style G8 fill:#ffd700,color:#000
+    style G9 fill:#ffd700,color:#000
+    style G10 fill:#ffd700,color:#000
+    style G11 fill:#ffd700,color:#000
+    style G12 fill:#ffa500,color:#000
+    style G13 fill:#ffa500,color:#000
+    style G14 fill:#ffa500,color:#000
+    style G15 fill:#ffa500,color:#000
+    style G16 fill:#ffa500,color:#000
+    style G17 fill:#ffd700,color:#000
+    style S1 fill:#c0c0c0,color:#000
+    style SP1 fill:#4ecdc4,color:#000
+    style S2 fill:#c0c0c0,color:#000
+    style SP2 fill:#4ecdc4,color:#000
+    style S3 fill:#c0c0c0,color:#000
+    style SP3 fill:#4ecdc4,color:#000
+    style S4 fill:#c0c0c0,color:#000
+    style SP4 fill:#4ecdc4,color:#000
+    style S5 fill:#c0c0c0,color:#000
+    style SP5 fill:#4ecdc4,color:#000
+    style S6 fill:#c0c0c0,color:#000
+    style SP6 fill:#4ecdc4,color:#000
+    style S7 fill:#c0c0c0,color:#000
+    style SP7 fill:#4ecdc4,color:#000
+    style S8 fill:#c0c0c0,color:#000
+    style SP8 fill:#4ecdc4,color:#000
+    style S9 fill:#c0c0c0,color:#000
+    style SP9 fill:#4ecdc4,color:#000
+    style S10 fill:#c0c0c0,color:#000
+    style SP10 fill:#4ecdc4,color:#000
+    style S11 fill:#c0c0c0,color:#000
+    style SP11 fill:#4ecdc4,color:#000
+    style S12 fill:#c0c0c0,color:#000
+    style SP12 fill:#4ecdc4,color:#000
+    style S13 fill:#c0c0c0,color:#000
+    style SP13 fill:#4ecdc4,color:#000
+    style S14 fill:#c0c0c0,color:#000
+    style SP14 fill:#4ecdc4,color:#000
+    style S15 fill:#c0c0c0,color:#000
+    style SP15 fill:#4ecdc4,color:#000
+    style S16 fill:#c0c0c0,color:#000
+    style SP16 fill:#4ecdc4,color:#000
+    style S17 fill:#c0c0c0,color:#000
+    style SP17 fill:#4ecdc4,color:#000
+    style S18 fill:#c0c0c0,color:#000
+    style SP18 fill:#4ecdc4,color:#000
+    style S19 fill:#c0c0c0,color:#000
+    style SP19 fill:#4ecdc4,color:#000
+    style S20 fill:#c0c0c0,color:#000
+    style SP20 fill:#4ecdc4,color:#000
+    style S21 fill:#c0c0c0,color:#000
+    style SP21 fill:#4ecdc4,color:#000
+    style S22 fill:#c0c0c0,color:#000
+    style SP22 fill:#4ecdc4,color:#000
+    style S23 fill:#c0c0c0,color:#000
+    style SP23 fill:#4ecdc4,color:#000
+    style S24 fill:#c0c0c0,color:#000
+    style SP24 fill:#4ecdc4,color:#000
+    style S25 fill:#c0c0c0,color:#000
+    style SP25 fill:#4ecdc4,color:#000
+    style S26 fill:#c0c0c0,color:#000
+    style SP26 fill:#4ecdc4,color:#000
+    style S27 fill:#c0c0c0,color:#000
+    style SP27 fill:#4ecdc4,color:#000
+    style S28 fill:#c0c0c0,color:#000
+    style SP28 fill:#4ecdc4,color:#000
+    style S29 fill:#c0c0c0,color:#000
+    style SP29 fill:#4ecdc4,color:#000
+    style B1 fill:#cd7f32,color:#fff
+    style B2 fill:#cd7f32,color:#fff
+    style B3 fill:#cd7f32,color:#fff
+    style B4 fill:#cd7f32,color:#fff
+    style B5 fill:#cd7f32,color:#fff
+    style B6 fill:#cd7f32,color:#fff
+    style B7 fill:#cd7f32,color:#fff
+    style B8 fill:#cd7f32,color:#fff
+    style B9 fill:#cd7f32,color:#fff
+    style B10 fill:#cd7f32,color:#fff
+    style B11 fill:#cd7f32,color:#fff
+    style B12 fill:#cd7f32,color:#fff
+    style B13 fill:#cd7f32,color:#fff
+    style B14 fill:#cd7f32,color:#fff
+    style B15 fill:#cd7f32,color:#fff
+    style B16 fill:#cd7f32,color:#fff
+    style B17 fill:#cd7f32,color:#fff
+    style B18 fill:#cd7f32,color:#fff
+    style B19 fill:#cd7f32,color:#fff
+    style B20 fill:#cd7f32,color:#fff
+    style B21 fill:#cd7f32,color:#fff
+    style B22 fill:#cd7f32,color:#fff
+    style B23 fill:#cd7f32,color:#fff
+    style B24 fill:#cd7f32,color:#fff
+    style B25 fill:#cd7f32,color:#fff
+    style B26 fill:#cd7f32,color:#fff
+    style B27 fill:#cd7f32,color:#fff
+    style B28 fill:#cd7f32,color:#fff
+    style B29 fill:#cd7f32,color:#fff
+    style B30 fill:#cd7f32,color:#fff
+    style B31 fill:#cd7f32,color:#fff
+    style B32 fill:#cd7f32,color:#fff
+    style B33 fill:#cd7f32,color:#fff
+    style B34 fill:#cd7f32,color:#fff
+    style B35 fill:#cd7f32,color:#fff
+    style B36 fill:#cd7f32,color:#fff
+    style B37 fill:#cd7f32,color:#fff
+    style B38 fill:#cd7f32,color:#fff
+    style B39 fill:#cd7f32,color:#fff
+    style B40 fill:#cd7f32,color:#fff
+    style B41 fill:#cd7f32,color:#fff
+    style B42 fill:#cd7f32,color:#fff
+    style B43 fill:#cd7f32,color:#fff
+    style B44 fill:#cd7f32,color:#fff
+    style B45 fill:#cd7f32,color:#fff
+    style B46 fill:#cd7f32,color:#fff
+    style B47 fill:#cd7f32,color:#fff
+    style B48 fill:#cd7f32,color:#fff
+    style B49 fill:#cd7f32,color:#fff
+    style B50 fill:#cd7f32,color:#fff
+    style B51 fill:#cd7f32,color:#fff
+    style B52 fill:#cd7f32,color:#fff
+    style B53 fill:#cd7f32,color:#fff
+    style B54 fill:#cd7f32,color:#fff
+    style B55 fill:#cd7f32,color:#fff
+    style B56 fill:#cd7f32,color:#fff
+    style B57 fill:#cd7f32,color:#fff
+    style B58 fill:#cd7f32,color:#fff
+    style B59 fill:#cd7f32,color:#fff
+    style B60 fill:#cd7f32,color:#fff
+    style B61 fill:#cd7f32,color:#fff
+    style B62 fill:#cd7f32,color:#fff
+    style B63 fill:#cd7f32,color:#fff
+    style B64 fill:#cd7f32,color:#fff
+    style B65 fill:#cd7f32,color:#fff
+    style B66 fill:#cd7f32,color:#fff
+    style B67 fill:#cd7f32,color:#fff
+    style B68 fill:#cd7f32,color:#fff
+    style B69 fill:#cd7f32,color:#fff
+    style B70 fill:#cd7f32,color:#fff
+    style B71 fill:#cd7f32,color:#fff
+    style B72 fill:#cd7f32,color:#fff
+    style B73 fill:#cd7f32,color:#fff
+    style B74 fill:#cd7f32,color:#fff
+    style B75 fill:#cd7f32,color:#fff
+    style B76 fill:#cd7f32,color:#fff
+    style B77 fill:#cd7f32,color:#fff
+    style B78 fill:#cd7f32,color:#fff
+    style B79 fill:#cd7f32,color:#fff
+    style B80 fill:#cd7f32,color:#fff
+    style B81 fill:#cd7f32,color:#fff
+    style B82 fill:#cd7f32,color:#fff
+    style B83 fill:#cd7f32,color:#fff
+    style B84 fill:#cd7f32,color:#fff
+    style B85 fill:#cd7f32,color:#fff
+    style B86 fill:#cd7f32,color:#fff
+    style B87 fill:#cd7f32,color:#fff
+    style B88 fill:#cd7f32,color:#fff
+        </div>
+        <p class="note">Regenerated from notebooks: 2026-04-02 &nbsp;|&nbsp; Solid arrows = reads &nbsp;&middot;&nbsp; Dashed arrows = SP loads / direct Bronze access</p>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'basis', nodeSpacing: 50, rankSpacing: 80 } });
+    </script>
+</body>
+</html>
