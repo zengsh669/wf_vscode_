@@ -9,6 +9,7 @@ sql_db/visualizations/
 sql_db/movement/
 sql_db/claims/
 sql_db/Lib_Westfund/__pycache__/
+sql_db/DWH_/*.*
 sql_db/DWH_/01_ClaimEpisodeLink_QVD_Generator/
 sql_db/DWH_/02_Episode_ACHI_Chapter_QVD Generator/
 sql_db/DWH_/03_Clinical_Condition_Group QVD Generator/
