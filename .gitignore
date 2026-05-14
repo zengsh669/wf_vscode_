@@ -1,26 +1,31 @@
+# IDE / editor
+.vscode/
+.claude/settings.local.json
+
 # Jupyter notebooks
 sql_db/movement_script.ipynb
 sql_db/Jira_data_export.ipynb
 sql_db/claims_script.ipynb
-
+sql_db/geo_mapping.ipynb
+sql_db/geo_mapping sql_validation.ipynb
+sql_db/joins_sales_his.ipynb
+sql_db/snapshot_backup.ipynb
+sql_db/test_outlook_connection.ipynb
+sql_db/earned_contributions_rolling.ipynb
 
 # Folders
 sql_db/visualizations/
 sql_db/movement/
 sql_db/claims/
 sql_db/Lib_Westfund/__pycache__/
+
+# DWH_ — ignore all root-level files; ignore all project subfolders
 sql_db/DWH_/*.*
 sql_db/DWH_/01_ClaimEpisodeLink_QVD_Generator/
 sql_db/DWH_/02_Episode_ACHI_Chapter_QVD Generator/
 sql_db/DWH_/03_Clinical_Condition_Group QVD Generator/
 sql_db/DWH_/07_Claim_Dashboard_HCS/
-sql_db/DWH_/09_Memship_report_Current_mth_joins/
-sql_db/DWH_/10_LHC/
-sql_db/DWH_/11_dental_center_financial_dashboard/
-sql_db/DWH_/12_claims_app_for_fund/
-sql_db/DWH_/13_earned_contribution_check/
 sql_db/DWH_/14_Declined_HICAPS_report/
-sql_db/DWH_/66_Retained_Members/
-vscode/
+
 # JSON parameters
 sql_db/ADF_parametres/*.json
