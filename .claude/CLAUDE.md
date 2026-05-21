@@ -61,6 +61,9 @@ Optional argument `HEAD~N` to compare against an earlier commit.
 ### `/memship_qlik_usage`
 Generates interactive HTML sparkline reports from QlikSense session log exports (Excel/CSV).
 
+### `/md2pdf [path/to/file.md]`
+Converts a Markdown file to a styled PDF using Word COM. Defaults to `sql_db/title_change_request.md` if no path is given. The source MD file is never modified; the PDF is written to the same directory with the same basename.
+
 ## Python Library (`sql_db/Lib_Westfund/`)
 
 Used in notebooks for data validation:
