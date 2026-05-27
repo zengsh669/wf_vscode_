@@ -61,6 +61,9 @@ Optional argument `HEAD~N` to compare against an earlier commit.
 ### `/memship_qlik_usage`
 Generates interactive HTML sparkline reports from QlikSense session log exports (Excel/CSV).
 
+### `/copilot-kb [view_name]`
+Builds a Copilot Agent Knowledge Base MD file for a `GOLD.copilot` view. Reads the canonical sample at `.claude/skills/copilot-kb/samples/ME_Total_Membership.md` for structure reference, then guides through data refresh, granularity verification, column documentation, and example query generation. Output path defaults to `sql_db/<view_name>.md`.
+
 ### `/md2pdf [path/to/file.md]`
 Converts a Markdown file to a styled PDF using Word COM. Defaults to `sql_db/title_change_request.md` if no path is given. The source MD file is never modified; the PDF is written to the same directory with the same basename.
 
