@@ -107,6 +107,16 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 **CRITICAL RULE: Always read actual SQL from notebooks first.**
 Before making ANY update to `data_lineage_table.html` or `data_lineage.html`, you MUST read the actual SQL from `gold_view.ipynb` and/or `silver_tbl_sp.ipynb` for the affected objects. Never rely on the object lists in this SKILL.md as the source of truth for Bronze table names, Silver dependencies, or any SQL-derived detail — those lists are summaries only and can be stale. Derive all dependency information directly from the notebook SQL.
 
+**CRITICAL RULE: Object counts in the subtitle must be computed from notebooks, never copied from the existing HTML.**
+After parsing all objects, count Gold Views, Silver Tables, and Silver SPs programmatically and write those numbers into the subtitle line. Do NOT reuse whatever numbers were already in the HTML file — they may be stale.
+
+**CRITICAL RULE: Object classification priority.**
+When classifying a notebook object as Table vs SP, always apply this priority order:
+1. If SQL contains `CREATE PROCEDURE` or `CREATE PROC` → **SP** (even if the SP body also contains `CREATE TABLE` for temp tables)
+2. If SQL contains `CREATE VIEW` → **Gold View**
+3. If SQL contains `CREATE TABLE` (and no `CREATE PROCEDURE`) → **Silver Table**
+Never use `CREATE TABLE` alone to classify an object as a Table when `CREATE PROCEDURE` is also present in the same SQL block.
+
 When user invokes `/lineage`, follow these steps:
 
 1. **If user wants to add/remove/update objects:**
