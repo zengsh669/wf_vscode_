@@ -44,7 +44,7 @@
     <p class="subtitle">Regenerated from notebooks: 2026-06-04 &nbsp;|&nbsp; 21 Gold Views &nbsp;&middot;&nbsp; 35 Silver Tables &nbsp;&middot;&nbsp; 35 Silver SPs &nbsp;&middot;&nbsp; ~100 Bronze Tables</p>
 
     <h2>Silver Tables &mdash; Gold Views, SPs &amp; Bronze Sources</h2>
-    <p class="section-note">Sorted by pipeline / execution dependency order. Gold column shows which Gold Views read the table. Silver Inputs column shows Silver-to-Silver dependencies. Bronze sources derived from actual notebook SQL.</p>
+    <p class="section-note">Sorted by pipeline / execution dependency order. Gold column shows which Gold Views read the table. Silver Inputs column shows Silver-to-Silver dependencies. Bronze sources derived from actual notebook SQL with comments stripped.</p>
     <table>
         <thead>
             <tr>
@@ -92,7 +92,7 @@
             <td><span class="badge sp">usp_Load_Episode_Base_Data</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge silver">ICD_Code_Mapping</span><span class="badge silver">fact_claim_data</span></div></td>
-            <td><div class="bronze-list"><span class="badge bronze">ClaimDetailGenAndHosp</span><span class="badge bronze">claim_generalitem</span><span class="badge bronze">claim_hospitalitem</span><span class="badge bronze">claim_line</span><span class="badge bronze">claim_line_status_type</span><span class="badge bronze">episode</span><span class="badge bronze">episode_diagnosis_procedure</span><span class="badge bronze">medical_item_icd_10am</span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">claim_generalitem</span><span class="badge bronze">claim_hospitalitem</span><span class="badge bronze">claim_line</span><span class="badge bronze">claim_line_status_type</span><span class="badge bronze">episode</span><span class="badge bronze">episode_diagnosis_procedure</span><span class="badge bronze">medical_item_icd_10am</span></div></td>
         </tr>
         <tr>
             <td><span class="badge silver">Episode_Classification</span></td>
@@ -317,7 +317,7 @@
     </table>
 
     <h2>Gold Views &mdash; Silver &amp; Direct Bronze Dependencies</h2>
-    <p class="section-note">Orange = reads Bronze directly only. Gold = reads via Silver Tables. Dependencies parsed from actual notebook SQL.</p>
+    <p class="section-note">Orange = reads Bronze directly only. Gold = reads via Silver Tables. Dependencies parsed from actual notebook SQL with comments stripped.</p>
     <table>
         <thead>
             <tr>
