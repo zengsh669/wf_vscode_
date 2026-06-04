@@ -41,7 +41,7 @@
 </head>
 <body>
     <h1>Data Warehouse &mdash; Full Lineage Table</h1>
-    <p class="subtitle">Regenerated from notebooks: 2026-05-13 &nbsp;|&nbsp; 18 Gold Views &nbsp;&middot;&nbsp; 36 Silver Tables &nbsp;&middot;&nbsp; 35 Silver SPs &nbsp;&middot;&nbsp; ~100 Bronze Tables</p>
+    <p class="subtitle">Regenerated from notebooks: 2026-06-04 &nbsp;|&nbsp; 21 Gold Views &nbsp;&middot;&nbsp; 36 Silver Tables &nbsp;&middot;&nbsp; 35 Silver SPs &nbsp;&middot;&nbsp; ~100 Bronze Tables</p>
 
     <h2>Silver Tables &mdash; Gold Views, SPs &amp; Bronze Sources</h2>
     <p class="section-note">Sorted by pipeline / execution dependency order. Gold column shows which Gold Views read the table. Silver Inputs column shows Silver-to-Silver dependencies.</p>
@@ -423,6 +423,24 @@
             <td><span class="badge gold">vw_glossary_hierarchy</span></td>
             <td><div class="gold-col"><span class="badge silver">GOV.glossary_full_cleaned</span></div></td>
             <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td colspan="3" style="background:#1a1a2e;color:#ffd700;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">copilot Schema Views &mdash; Copilot Agent 查询层（SELECT * FROM dbo 对应视图）</td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">[copilot].ME_Total_Membership</span></td>
+            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
+            <td><span class="na">&mdash; (via dbo.ME_Total_Membership)</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">[copilot].Membership_Budget</span></td>
+            <td><div class="gold-col"><span class="badge silver">Membership_Budget</span><span class="badge silver">Product</span></div></td>
+            <td><span class="na">&mdash; (via dbo.Membership_Budget)</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge orange">[copilot].vw_ovhc</span></td>
+            <td><span class="na">&mdash; (via dbo.vw_ovhc)</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">country_code</span><span class="badge bronze">cover</span><span class="badge bronze">cover_product</span><span class="badge bronze">grouping</span><span class="badge bronze">memship</span><span class="badge bronze">memship_app_agent</span><span class="badge bronze">memship_app_dep</span><span class="badge bronze">memship_app_sales_promo</span><span class="badge bronze">product</span><span class="badge bronze">promotion_sales_channel</span><span class="badge bronze">visa_type</span></div></td>
         </tr>
         </tbody>
     </table>
