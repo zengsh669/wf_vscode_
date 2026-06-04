@@ -104,9 +104,14 @@ Gold Views ──reads──> Silver Tables <──loads── Silver SPs <─�
 
 ## Task Instructions
 
+**CRITICAL RULE: Always read actual SQL from notebooks first.**
+Before making ANY update to `data_lineage_table.html` or `data_lineage.html`, you MUST read the actual SQL from `gold_view.ipynb` and/or `silver_tbl_sp.ipynb` for the affected objects. Never rely on the object lists in this SKILL.md as the source of truth for Bronze table names, Silver dependencies, or any SQL-derived detail — those lists are summaries only and can be stale. Derive all dependency information directly from the notebook SQL.
+
 When user invokes `/lineage`, follow these steps:
 
 1. **If user wants to add/remove/update objects:**
+   - **Read the actual SQL from `gold_view.ipynb` / `silver_tbl_sp.ipynb`** for the affected objects
+   - Parse Bronze sources and Silver dependencies from the SQL (FROM clauses, JOINs)
    - Read the current `data_lineage.html`
    - Modify the Mermaid diagram accordingly
    - Update the statistics numbers
