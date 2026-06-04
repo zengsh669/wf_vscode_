@@ -117,6 +117,12 @@ When classifying a notebook object as Table vs SP, always apply this priority or
 3. If SQL contains `CREATE TABLE` (and no `CREATE PROCEDURE`) → **Silver Table**
 Never use `CREATE TABLE` alone to classify an object as a Table when `CREATE PROCEDURE` is also present in the same SQL block.
 
+**CRITICAL RULE: Strip SQL comments before parsing dependencies.**
+Before extracting Bronze/Silver table references from any SQL block, always remove:
+1. Line comments: `--` to end of line
+2. Block comments: `/* ... */`
+Failure to strip comments causes commented-out table references (e.g. old JOIN code left as `-- LEFT JOIN BRONZE.dbo.OldTable`) to appear as active dependencies. Always apply comment stripping FIRST, then run the regex against the cleaned SQL.
+
 When user invokes `/lineage`, follow these steps:
 
 1. **If user wants to add/remove/update objects:**
