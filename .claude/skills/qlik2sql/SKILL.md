@@ -15,6 +15,29 @@ Two modes depending on whether a SQL object is provided:
 
 ---
 
+## Core Principles (Generate Mode)
+
+These principles apply throughout the entire Generate mode workflow:
+
+### Principle 1 — Faithfulness to Qlik Logic
+- All generated SQL must faithfully replicate the source Qlik logic as closely as possible
+- Structural flexibility is allowed (e.g. splitting one large Qlik table into multiple smaller Silver tables joined via queries or Power BI model), but the Qlik logic remains the source of truth
+- If any part of the Qlik logic appears incorrect, redundant, overly complex, or inefficient, **do not silently fix it** — present the issue and a proposed optimisation to the user and wait for confirmation before applying any change
+
+### Principle 2 — SQL Must Be Runnable
+- All generated SQL files must be executable in SQL Server (SSMS) without errors
+- Before writing any final SQL file, perform a quality check covering:
+  - **Syntax**: brackets, keywords, semicolons, GO statements, USE statements
+  - **Business logic**: JOIN conditions and keys, data type compatibility, NULL handling, column references, TRUNCATE + INSERT column alignment
+
+### Principle 3 — Self-Review Before Final Output
+- Before writing final SQL files to disk, ask the user:
+  > "Do you want me to run a deep review using a sub-agent (recommended for complex scripts)? This will independently audit the SQL for Principle 1 and Principle 2 compliance before output."
+- If user confirms: spawn a sub-agent using the `opus` model to independently review the generated SQL against both principles, report findings, and apply any fixes before final output
+- If user declines: proceed with self-review only (re-read and verify the generated SQL against both principles before writing files)
+
+---
+
 ## Generate Mode Workflow (no SQL object provided)
 
 ### Step 0: Source Table Discovery
@@ -88,7 +111,11 @@ Propose table names using the naming convention:
 - Words separated by `_`
 - Examples: `Retained_Member`, `Retention_Tasklist`
 
-**STOP — confirm table names with user before continuing.**
+If there are multiple output tables, also propose a file organisation strategy:
+- **Option A: One file per table** — `create_table_X.sql` + `usp_Load_X.sql` for each table (recommended when tables are independent)
+- **Option B: Combined files** — all `CREATE TABLE` in one file, all SPs in one file (recommended when tables are tightly related)
+
+**STOP — confirm table names and file organisation with user before continuing.**
 
 ---
 
@@ -126,14 +153,29 @@ ORDER BY TABLE_NAME, COLUMN_NAME;
 
 ---
 
-### Step 5: Generate CREATE TABLE Files
+### Step 4.5: Generate DESIGN.md (write to disk)
 
-One file per output table, saved to the same folder as the Qlik `.md` file:
-- Filename: `create_table_[Table_Name].sql`
+Using all confirmed decisions from Step 0–4, generate a `DESIGN.md` file and save it to the same folder as the Qlik `.md` file.
+
+Follow the structure and format of the reference sample at `.claude/skills/qlik2sql/samples/DESIGN.md`. The document must include:
+- **Overview** — project summary, source systems, architecture decision (e.g. no GOLD view)
+- **Architecture diagram** — ASCII showing data flow from source → SILVER → consumer
+- **Silver Tables** — one section per table with: source values, data sources table, key columns table (column / origin / notes), generated files list
+- **Objects NOT Built** — any Qlik objects deliberately excluded and why
+- **Files to Generate** — full file tree of all `.sql` files to be produced
+- **Refresh Strategy** — TRUNCATE + INSERT pattern, recommended SP execution order
+
+**STOP — ask user to review DESIGN.md and confirm before drafting any SQL.**
+
+---
+
+### Step 5: Draft CREATE TABLE SQL (in memory only — do not write files yet)
+
+Draft the CREATE TABLE SQL for each output table in memory:
 - Target: `SILVER.dbo.[Table_Name]`
-- Column naming: same Title_Case_With_Underscores convention
+- Column naming: Title_Case_With_Underscores convention
 
-Example:
+Example draft:
 ```sql
 CREATE TABLE SILVER.dbo.Retained_Member (
     Membership_Id          DECIMAL(9,0)   NOT NULL,
@@ -142,31 +184,28 @@ CREATE TABLE SILVER.dbo.Retained_Member (
 );
 ```
 
-**STOP — ask user to create the tables in SILVER and confirm before generating SPs.**
+**STOP — show draft to user and ask them to confirm column definitions before continuing.**
 
 ---
 
-### Step 6: Generate Pure SELECT Queries (optional)
+### Step 6: Draft Pure SELECT Queries (optional, in memory only)
 
-Before writing SPs, optionally generate plain `SELECT` queries (no `CREATE VIEW` or `CREATE PROCEDURE` wrapper) for the user to test in SSMS.
+Optionally draft plain `SELECT` queries (no SP wrapper) for the user to test in SSMS:
+- One query per Qlik LOAD section
+- Show the draft queries in the chat for user to copy and run in SSMS
 
-- One `.sql` file per Qlik LOAD section
-- Filename: matches the Qlik table name (e.g., `tasklist.sql`, `retained_members.sql`)
-- Each Qlik named LOAD section → one query file
-
-**STOP — ask user to confirm query results before generating SPs.**
+**STOP — ask user to confirm query results before drafting SPs.**
 
 ---
 
-### Step 7: Generate Stored Procedures
+### Step 7: Draft Stored Procedures (in memory only — do not write files yet)
 
-One SP per output table:
-- Filename: `usp_Load_[Table_Name].sql`
+Draft the SP SQL for each output table in memory:
 - Target database: SILVER
 - Strategy: `TRUNCATE + INSERT` (full refresh)
 - Use `USE SILVER; GO` before `CREATE OR ALTER PROCEDURE` (no DB prefix on procedure name)
 
-Structure:
+Example draft:
 ```sql
 USE SILVER;
 GO
@@ -197,15 +236,61 @@ END;
 
 ---
 
+### Step 8: Code Quality Check (against in-memory drafts — do not write files yet)
+
+Review all drafted SQL (from Step 5 and Step 7) against **both principles**. Apply checks according to the file organisation strategy confirmed in Step 3 (Option A: one file per table, or Option B: combined files). Apply the following fix rules when issues are found, then re-run the entire Step 8 checklist from the top — repeat until all checks pass before proceeding to Step 9.
+
+**Fix rules:**
+- **Pure technical errors** (syntax, mismatched brackets, wrong column count, missing GO, etc.) → Claude fixes automatically without asking the user
+- **Business logic issues** (wrong JOIN keys, incorrect filter, unfaithful Qlik translation, data type mismatch that affects output) → present the issue and proposed fix to the user via a STOP, apply only after user confirms
+
+**Principle 1 — Qlik faithfulness checks (re-read the Qlik `.md` source for each item):**
+- [ ] Every Qlik LOAD section has a corresponding SQL output table
+- [ ] Every Qlik data source (QVD, SQL table, Excel) is accounted for in the SQL (as BRONZE JOIN, CTE, or comment placeholder)
+- [ ] Every Qlik `ApplyMap()` is translated as a `LEFT JOIN` + `ISNULL()` with the correct default value
+- [ ] Every Qlik `Left Join` includes ALL matching field names as JOIN keys (not just one)
+- [ ] Every Qlik filter (`WHERE`, `IF`, `Wildmatch`) has a corresponding SQL equivalent
+- [ ] Every Qlik calculated field (`If()`, `Age()`, `Monthname()`, etc.) is correctly translated per the translation reference table
+- [ ] If structural flexibility was applied (e.g. one Qlik table split into multiple Silver tables), verify the combined output still reproduces the Qlik logic faithfully
+- [ ] Any optimisations applied were explicitly confirmed by the user in an earlier STOP
+
+**Principle 2 — Runnability checks (SQL must execute without errors in SSMS):**
+- [ ] All `CREATE TABLE` / `CREATE OR ALTER PROCEDURE` statements are well-formed
+- [ ] Brackets are balanced; all strings are properly quoted
+- [ ] `USE SILVER; GO` present before every `CREATE OR ALTER PROCEDURE`
+- [ ] No database prefix on procedure names
+- [ ] All CTEs are properly terminated with commas (except the last)
+- [ ] `INSERT INTO` column list matches `SELECT` column count and order
+- [ ] `TRUNCATE TABLE` targets the correct table
+- [ ] Every JOIN has explicit ON conditions covering all required keys
+- [ ] Data types in `INSERT INTO` are compatible with source `SELECT` expressions
+- [ ] NULL handling is consistent with Qlik source logic (`ISNULL`, `COALESCE`)
+- [ ] All columns referenced in SELECT exist in their source tables (based on Step 4 discovery)
+- [ ] `TRUNCATE + INSERT` pattern is complete — no orphaned TRUNCATE without a following INSERT
+
+---
+
+### Step 9: Sub-Agent Independent Review
+
+Ask the user:
+> "Step 8 quality check passed. Do you want me to run an independent sub-agent review before writing the final files? The sub-agent will re-run the full Step 8 checklist independently using a stronger model. Recommended for complex scripts."
+
+- **If yes**: spawn a sub-agent with model `opus` — provide it the Qlik `.md` source and all drafted SQL, instruct it to re-run the complete Step 8 checklist (both Principle 1 and Principle 2 checks) independently. If it finds issues, fix the drafts and the sub-agent re-verifies until all checks pass. Then write final SQL files according to the file organisation strategy confirmed in Step 3 (Option A or B).
+- **If no**: write final SQL files immediately according to the file organisation strategy confirmed in Step 3 (Option A or B).
+
+**After writing final SQL files (both paths):** Update `DESIGN.md` to reflect any design changes that occurred during Step 5–9 (e.g. column type corrections, logic adjustments, structural changes confirmed by user). The final `DESIGN.md` must be fully consistent with the generated SQL files.
+
+---
+
 ## Verify Mode Workflow (SQL object provided)
 
 ### Step 1: Read Both Files
 
 1. Read the Qlik `.md` file
-2. Locate and read the SQL file(s) based on user-specified object type:
-   - Views: Search in `sql_db/DWH_/**/vw_*.sql` or `gold_view.ipynb`
-   - Tables: Search in `sql_db/DWH_/**/` or `silver_tbl_sp.ipynb`
-   - SPs: Search in `sql_db/DWH_/**/usp_*.sql` or `silver_tbl_sp.ipynb`
+2. Locate and read the SQL object from the master notebooks:
+   - Views: `sql_db/DWH_/Database/gold_view.ipynb`
+   - Tables: `sql_db/DWH_/Database/silver_tbl_sp.ipynb`
+   - SPs: `sql_db/DWH_/Database/silver_tbl_sp.ipynb`
 
 ### Step 2: Analyze Qlik Code Structure
 
