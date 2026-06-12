@@ -41,7 +41,7 @@
 </head>
 <body>
     <h1>Data Warehouse &mdash; Full Lineage Table</h1>
-    <p class="subtitle">Regenerated from notebooks: 2026-06-04 &nbsp;|&nbsp; 21 Gold Views &nbsp;&middot;&nbsp; 35 Silver Tables &nbsp;&middot;&nbsp; 35 Silver SPs &nbsp;&middot;&nbsp; ~100 Bronze Tables</p>
+    <p class="subtitle">Regenerated from notebooks: 2026-06-12 &nbsp;|&nbsp; 21 Gold Views &nbsp;&middot;&nbsp; 39 Silver Tables &nbsp;&middot;&nbsp; 37 Silver SPs &nbsp;&middot;&nbsp; ~100 Bronze Tables</p>
 
     <h2>Silver Tables &mdash; Gold Views, SPs &amp; Bronze Sources</h2>
     <p class="section-note">Sorted by pipeline / execution dependency order. Gold column shows which Gold Views read the table. Silver Inputs column shows Silver-to-Silver dependencies. Bronze sources derived from actual notebook SQL with comments stripped.</p>
@@ -297,6 +297,13 @@
             <td><div class="bronze-list"><span class="badge bronze">Membership_Termination_Map</span><span class="badge bronze">termination_code</span></div></td>
         </tr>
         <tr>
+            <td><span class="badge silver">RPA_Consolidated</span></td>
+            <td><span class="badge sp">usp_Load_RPA_Consolidated</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">claim_status</span><span class="badge bronze">claim_status_type</span><span class="badge bronze">item_averagefee</span><span class="badge bronze">rpa</span></div></td>
+        </tr>
+        <tr>
             <td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">GOV Schema Tables</td>
         </tr>
         <tr>
@@ -312,6 +319,30 @@
             <td><div class="gold-col"><span class="badge gold">vw_glossary_hierarchy</span></div></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">Westfund_Enterprise_Glossary</span></div></td>
+        </tr>
+        <tr>
+            <td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">OBS Schema Tables &mdash; ETL Observability / Health Monitoring</td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">obs.ETL_SchemaDrift</span></td>
+            <td><span class="badge sp">obs.usp_CheckHealth</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">obs.ETL_SchemaSnapshot</span></td>
+            <td><span class="badge sp">obs.usp_CheckHealth</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">obs.ETL_VolumeLog</span></td>
+            <td><span class="badge sp">obs.usp_CheckHealth</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         </tbody>
     </table>
