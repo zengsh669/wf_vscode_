@@ -6,7 +6,7 @@
 
 **Workspace:** All Staff  
 **Size Bucket(MB):** 150  
-**Scheduled Refresh:** At 9:05 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *dim_yr table to 2027*
@@ -23,7 +23,7 @@
 
 **Workspace:** Cross-Functional  
 **Size Bucket(MB):** 50  
-**Scheduled Refresh:** At 9:30 AM on day(s) 13 of every month  
+**Scheduled Refresh:** At 9:00 AM on day(s) 13 of every month  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *Access control check*
@@ -42,7 +42,7 @@
 
 **Workspace:** --  
 **Size Bucket(MB):** 50  
-**Scheduled Refresh:** At 9:40 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *References from QMS template "https://ei-mysupport-kb.smartsupportapp.com/articles/962-Install%2FUpdate-Power-BI-template?view_portal_id=1592"*
@@ -92,7 +92,7 @@
 
 **Workspace:** All Staff  
 **Size Bucket(MB):** 1  
-**Scheduled Refresh:** At 9:05 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*  
 - *Waterfall logic*
@@ -109,7 +109,7 @@
 
 **Workspace:** All Staff  
 **Size Bucket(MB):** 10  
-**Scheduled Refresh:** At 9:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *Dynamic date filter*
@@ -171,7 +171,7 @@
 
 **Workspace:** Finance  
 **Size Bucket(MB):** 1  
-**Scheduled Refresh:** At 9:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *Calculated deficit measure; SAD_Qtr measure*
