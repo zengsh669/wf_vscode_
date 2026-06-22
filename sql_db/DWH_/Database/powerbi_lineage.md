@@ -142,7 +142,7 @@
 
 **Workspace:** Operations  
 **Size Bucket(MB):** 5  
-**Scheduled Refresh:** At 9:20 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 8:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *Simple but comfortable design*
