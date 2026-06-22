@@ -90,7 +90,7 @@
 
 ## Digital and Core - Monthly Recap
 
-**Workspace:** All Staff 
+**Workspace:** All Staff  
 **Size Bucket(MB):** 1  
 **Scheduled Refresh:** At 9:05 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
