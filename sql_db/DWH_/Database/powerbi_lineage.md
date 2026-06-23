@@ -197,3 +197,17 @@
 - SILVER · `dbo.Product`; `dbo.Deceased_Active_Membership`
 
 ---
+
+## Arrears Report
+
+**Workspace:** WIP  
+**Size Bucket(MB):** 5  
+**Scheduled Refresh:** At 8:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
+***Notes:***
+- *DimDate till 30/06/2027*
+
+**Tables / Views:**
+- GOLD · `--`
+- SILVER · `dbo.Arrears_Report`  
+
+---
