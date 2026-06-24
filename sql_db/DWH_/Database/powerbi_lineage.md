@@ -202,7 +202,7 @@
 
 **Workspace:** WIP  
 **Size Bucket(MB):** 5  
-**Scheduled Refresh:** At 8:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 8:45 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 
