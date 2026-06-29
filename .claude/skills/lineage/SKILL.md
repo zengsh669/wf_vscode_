@@ -123,6 +123,25 @@ Before extracting Bronze/Silver table references from any SQL block, always remo
 2. Block comments: `/* ... */`
 Failure to strip comments causes commented-out table references (e.g. old JOIN code left as `-- LEFT JOIN BRONZE.dbo.OldTable`) to appear as active dependencies. Always apply comment stripping FIRST, then run the regex against the cleaned SQL.
 
+**CRITICAL RULE: Derive Table→SP mapping from SP SQL, never by name matching.**
+Do NOT guess which SP loads which table by matching names (e.g. assuming `usp_Load_X` loads table `X`). The only correct method is:
+1. Parse each SP's SQL (after stripping comments)
+2. Find all `TRUNCATE TABLE`, `INSERT INTO`, and `DROP TABLE` statements — these identify the actual target table
+3. Use that target to build the Table→SP mapping
+
+This is required because naming conventions are inconsistent — for example:
+- `usp_load_calculated_deficit_amb_levies` loads `CD_AL_Cover_Group_Keys` (not `calculated_deficit_amb_levies`)
+- `sp_LoadFactClaimData` loads `Claim_Episode_Staging` (not `fact_claim_data`)
+
+**CRITICAL RULE: Object references use bracket notation — regex must handle it.**
+SQL in these notebooks uses both `dbo.TableName` and `[SILVER].[dbo].[TableName]` and `SILVER.dbo.[TableName]` formats. Regex patterns that only match `SILVER\.dbo\.(\w+)` will silently miss references written as `[SILVER].[dbo].[TableName]`. Always write patterns that tolerate optional brackets: `\[?SILVER\]?\.\[?dbo\]?\.\[?(\w+)\]?`.
+
+**CRITICAL RULE: Some SPs use DROP TABLE + SELECT INTO instead of TRUNCATE + INSERT.**
+Not all SPs follow the standard TRUNCATE + INSERT pattern. Some use `DROP TABLE ... CREATE TABLE ... INSERT INTO` or even `DROP TABLE` alone to identify the target. Include `DROP TABLE` in your target-extraction regex, but exclude temp tables (names starting with `#`).
+
+**CRITICAL RULE: A single notebook cell header may contain multiple CREATE VIEW blocks.**
+In `gold_view.ipynb`, one markdown header (e.g. `# [dbo].[ME_Total_Membership]`) may be followed by code cells containing both `[dbo].[ViewName]` AND `[copilot].[ViewName]`. Always split on `CREATE VIEW` boundaries before parsing dependencies — never treat the entire cell block as a single view.
+
 When user invokes `/lineage`, follow these steps:
 
 1. **If user wants to add/remove/update objects:**
