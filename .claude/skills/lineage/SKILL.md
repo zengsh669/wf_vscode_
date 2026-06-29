@@ -142,6 +142,9 @@ Not all SPs follow the standard TRUNCATE + INSERT pattern. Some use `DROP TABLE 
 **CRITICAL RULE: A single notebook cell header may contain multiple CREATE VIEW blocks.**
 In `gold_view.ipynb`, one markdown header (e.g. `# [dbo].[ME_Total_Membership]`) may be followed by code cells containing both `[dbo].[ViewName]` AND `[copilot].[ViewName]`. Always split on `CREATE VIEW` boundaries before parsing dependencies — never treat the entire cell block as a single view.
 
+**CRITICAL RULE: Silver dependency regex must match any schema, not just `dbo`.**
+Some Gold Views and SPs reference Silver tables in non-dbo schemas, e.g. `SILVER.GOV.glossary_full_cleaned`. A regex that only matches `SILVER.dbo.X` will silently miss these. Always use a pattern that matches any schema: `\[?SILVER\]?\.\[?\w+\]?\.\[?(\w+)\]?`.
+
 When user invokes `/lineage`, follow these steps:
 
 1. **If user wants to add/remove/update objects:**
