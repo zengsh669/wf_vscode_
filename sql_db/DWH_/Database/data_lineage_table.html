@@ -29,7 +29,7 @@
 </head>
 <body>
     <h1>Data Warehouse &mdash; Full Lineage Table</h1>
-    <p class="subtitle">Regenerated from notebooks: 2026-06-29 &nbsp;|&nbsp; 18 Gold Views &nbsp;&middot;&nbsp; 37 Silver Tables &nbsp;&middot;&nbsp; 37 Silver SPs &nbsp;&middot;&nbsp; ~101 Bronze Tables</p>
+    <p class="subtitle">Regenerated from notebooks: 2026-06-29 &nbsp;|&nbsp; 21 Gold Views &nbsp;&middot;&nbsp; 40 Silver Tables &nbsp;&middot;&nbsp; 38 Silver SPs &nbsp;&middot;&nbsp; ~101 Bronze Tables</p>
     <h2>Silver Tables &mdash; Gold Views, SPs &amp; Bronze Sources</h2>
     <p class="section-note">Sorted by pipeline / execution dependency order. Gold column shows which Gold Views read the table. Silver Inputs column shows Silver-to-Silver dependencies. Bronze sources derived from actual notebook SQL with comments stripped.</p>
     <table>
@@ -277,7 +277,7 @@
             <td><span class="badge sp">usp_Load_QMS_Recording_Detail</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze"></span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">Flag_Details [qms]</span><span class="badge bronze">Recording_Details [qms]</span><span class="badge bronze">User_Details [qms]</span></div></td>
         </tr>
         <tr>
             <td><span class="badge silver">RPA_Consolidated</span></td>
@@ -285,6 +285,28 @@
             <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">claim_status</span><span class="badge bronze">claim_status_type</span><span class="badge bronze">item_averagefee</span><span class="badge bronze">rpa</span></div></td>
+        </tr>
+        <tr><td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">Observability (obs schema)</td></tr>
+        <tr>
+            <td><span class="badge silver">ETL_VolumeLog [obs]</span></td>
+            <td><span class="badge sp">usp_CheckHealth [obs]</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">INFORMATION_SCHEMA.TABLES (dbo/GOV)</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">ETL_SchemaDrift [obs]</span></td>
+            <td><span class="badge sp">usp_CheckHealth [obs]</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge silver">ETL_SchemaSnapshot [obs]</span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">INFORMATION_SCHEMA.COLUMNS (dbo/GOV)</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">ETL_SchemaSnapshot [obs]</span></td>
+            <td><span class="badge sp">usp_CheckHealth [obs]</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">INFORMATION_SCHEMA.COLUMNS (dbo/GOV)</span></div></td>
         </tr>
         <tr><td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">Governance</td></tr>
         <tr>
