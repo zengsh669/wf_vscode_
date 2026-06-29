@@ -42,7 +42,7 @@
 
 **Workspace:** --  
 **Size Bucket(MB):** 50  
-**Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
+**Scheduled Refresh:** At 8:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
 - *References from QMS template "https://ei-mysupport-kb.smartsupportapp.com/articles/962-Install%2FUpdate-Power-BI-template?view_portal_id=1592"*
