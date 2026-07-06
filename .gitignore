@@ -6,12 +6,7 @@
 sql_db/movement_script.ipynb
 sql_db/Jira_data_export.ipynb
 sql_db/claims_script.ipynb
-sql_db/geo_mapping.ipynb
-sql_db/geo_mapping sql_validation.ipynb
 sql_db/joins_sales_his.ipynb
-sql_db/snapshot_backup.ipynb
-sql_db/test_outlook_connection.ipynb
-sql_db/earned_contributions_rolling.ipynb
 sql_db/personal_notes_.md
 
 # Folders
