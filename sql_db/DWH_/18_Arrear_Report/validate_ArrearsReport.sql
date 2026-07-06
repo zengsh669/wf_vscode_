@@ -53,7 +53,7 @@ JoinedData AS (
     LEFT JOIN BRONZE.dbo.MemberAgent AS ma
         ON a.[Membership ID] = ma.membership_id
     LEFT JOIN BRONZE.dbo.web_security AS ws
-        ON pm.person_id = ws.main_ref_id
+        ON pm.person_id = ws.main_ref_id AND ws.membership_id = pm.membership_id
         AND ws.main_ref_type = 'P'
 ),
 RegisteredMO AS (
