@@ -20,11 +20,5 @@ sql_db/movement/
 sql_db/claims/
 sql_db/Lib_Westfund/__pycache__/
 
-# DWH_ — ignore all root-level files and project subfolders, except Database/
-sql_db/DWH_/*.*
-sql_db/DWH_/*/
-!sql_db/DWH_/Database/
-!sql_db/DWH_/Database/**
-
 # JSON parameters
 sql_db/ADF_parametres/*.json

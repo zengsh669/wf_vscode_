@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QMS Dashboard — Power BI Design</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #333; padding: 24px; }
+
+  h1 { color: #F06020; font-size: 20px; margin-bottom: 4px; }
+  h2 { color: #ccc; font-size: 12px; font-weight: normal; margin-bottom: 20px; }
+
+  .page {
+    background: #f4f4f4;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    width: 980px;
+  }
+
+  /* ── Slicers ── */
+  .slicer-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+  .slicer-label { font-size: 11px; color: #999; }
+  .slicer {
+    background: #fff;
+    border: 1.5px solid #F06020;
+    border-radius: 5px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: #555;
+  }
+  .media-btn {
+    padding: 5px 16px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: default;
+  }
+  .media-btn.active  { background: #F06020; color: #fff; }
+  .media-btn.inactive { background: #ddd; color: #999; }
+
+  .divider { border: none; border-top: 1px dashed #F0602040; margin: 12px 0; }
+
+  /* ── Cards ── */
+  .card-row { display: flex; gap: 12px; margin-bottom: 14px; }
+  .card {
+    flex: 1;
+    background: #fff;
+    border-left: 4px solid #F06020;
+    border-radius: 7px;
+    padding: 12px 16px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+  }
+  .card-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+  .card-value { font-size: 26px; font-weight: 700; color: #F06020; line-height: 1; }
+  .card-sub   { font-size: 10px; color: #ccc; margin-top: 4px; }
+
+  /* ── Charts ── */
+  .chart-row { display: flex; gap: 12px; margin-bottom: 14px; }
+  .chart {
+    background: #fff;
+    border-radius: 7px;
+    padding: 12px 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  .chart-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .axis-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: #ccc;
+    margin-top: 3px;
+  }
+
+  /* Bar chart */
+  .bar-row   { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .bar-dept  { font-size: 10px; color: #888; width: 100px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; background: #f0f0f0; border-radius: 3px; height: 13px; }
+  .bar-fill  { background: #F06020; height: 13px; border-radius: 3px; }
+  .bar-val   { font-size: 10px; color: #aaa; width: 40px; }
+
+  /* ── Matrix ── */
+  .matrix {
+    background: #fff;
+    border-radius: 7px;
+    padding: 12px 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+  }
+  .matrix-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th {
+    background: #F06020;
+    color: #fff;
+    padding: 6px 10px;
+    text-align: right;
+    font-weight: 600;
+    font-size: 10px;
+  }
+  thead th:first-child { text-align: left; }
+  tbody tr:nth-child(even):not(.dept-row) { background: #fdf3ee; }
+  tbody tr.dept-row { background: #e8e8e8; }
+  tbody tr.dept-row td { padding: 4px 10px; font-size: 10px; font-weight: 700; color: #555; }
+  tbody td { padding: 5px 10px; text-align: right; color: #555; border-bottom: 1px solid #f0f0f0; }
+  tbody td:first-child { text-align: left; padding-left: 22px; color: #333; }
+  tbody tr.dept-row td:first-child { padding-left: 10px; }
+  tfoot td { padding: 6px 10px; font-weight: 700; color: #F06020; text-align: right; background: #fff8f5; border-top: 2px solid #F06020; font-size: 11px; }
+  tfoot td:first-child { text-align: left; padding-left: 10px; }
+</style>
+</head>
+<body>
+
+<h1>QMS Telephone System — Power BI Dashboard</h1>
+<h2>Single-page wireframe · Theme #F06020 · Measures: Total_Calls, Total_Worktime, Avg_Handle_Time · Total_Agents (DISTINCTCOUNT)</h2>
+
+<div class="page">
+
+  <!-- ── Slicers ── -->
+  <div class="slicer-bar">
+    <span class="slicer-label">Date</span>
+    <div class="slicer">📅 15 Jan 2026 — 16 Jun 2026</div>
+    <span class="slicer-label" style="margin-left:10px">Media</span>
+    <button class="media-btn active">Phone</button>
+    <button class="media-btn inactive">Chat</button>
+    <button class="media-btn inactive">All</button>
+    <span class="slicer-label" style="margin-left:10px">Department</span>
+    <div class="slicer" style="color:#bbb">All departments</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── Cards ── -->
+  <div class="card-row">
+    <div class="card">
+      <div class="card-label">Total Calls</div>
+      <div class="card-value">106,998</div>
+      <div class="card-sub">COUNTROWS</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Worktime</div>
+      <div class="card-value">6581:35:03</div>
+      <div class="card-sub">SUM(Duration) → hh:mm:ss</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Avg Handle Time</div>
+      <div class="card-value">00:03:41</div>
+      <div class="card-sub">DIVIDE(Worktime, Calls)</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total Agents</div>
+      <div class="card-value">105</div>
+      <div class="card-sub">DISTINCTCOUNT(User_ID)</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- legend helper -->
+  <style>
+    .legend { display:flex; gap:14px; font-size:9px; color:#999; margin-top:4px; }
+    .legend-dot { display:inline-block; width:20px; height:2.5px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+  </style>
+
+  <!-- ── Charts row 1: line + bar ── -->
+  <div class="chart-row">
+
+    <!-- Line: Total Calls by Date — ALL mode shows Phone + Chat -->
+    <div class="chart" style="flex:2">
+      <div class="chart-title">Total Calls by Date &nbsp;<span style="font-size:9px;color:#aaa;font-weight:400;text-transform:none;letter-spacing:0">(when Media = All: two lines)</span></div>
+      <svg viewBox="0 0 500 100" preserveAspectRatio="none" style="width:100%;height:110px">
+        <!-- Phone line -->
+        <polyline points="0,75 50,60 100,65 150,42 200,55 250,30 300,48 350,36 400,52 450,22 500,40"
+          fill="none" stroke="#F06020" stroke-width="2.5"/>
+        <polyline points="0,75 50,60 100,65 150,42 200,55 250,30 300,48 350,36 400,52 450,22 500,40 500,100 0,100"
+          fill="#F0602012" stroke="none"/>
+        <!-- Chat line (lower volume, different colour) -->
+        <polyline points="0,88 50,80 100,84 150,70 200,76 250,62 300,72 350,65 400,74 450,55 500,66"
+          fill="none" stroke="#2196F3" stroke-width="2" stroke-dasharray="6,3"/>
+        <line x1="0" y1="100" x2="500" y2="100" stroke="#eee" stroke-width="1"/>
+      </svg>
+      <div class="axis-labels">
+        <span>15 Jan</span><span>01 Feb</span><span>01 Mar</span><span>01 Apr</span><span>01 May</span><span>16 Jun</span>
+      </div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#F06020"></span>Phone</span>
+        <span><span class="legend-dot" style="background:#2196F3"></span>Chat (All mode only)</span>
+      </div>
+    </div>
+
+    <!-- Bar: Calls by Department -->
+    <div class="chart" style="flex:1">
+      <div class="chart-title">Total Calls by Department</div>
+      <div class="bar-row"><span class="bar-dept">Care Centre</span><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><span class="bar-val">38,420</span></div>
+      <div class="bar-row"><span class="bar-dept">Claims</span><div class="bar-track"><div class="bar-fill" style="width:74%"></div></div><span class="bar-val">28,461</span></div>
+      <div class="bar-row"><span class="bar-dept">Sales</span><div class="bar-track"><div class="bar-fill" style="width:52%"></div></div><span class="bar-val">19,964</span></div>
+      <div class="bar-row"><span class="bar-dept">Support</span><div class="bar-track"><div class="bar-fill" style="width:35%"></div></div><span class="bar-val">13,450</span></div>
+      <div class="bar-row"><span class="bar-dept">(NULL)</span><div class="bar-track"><div class="bar-fill" style="width:17%"></div></div><span class="bar-val">6,703</span></div>
+    </div>
+
+  </div>
+
+  <!-- ── Charts row 2: two line charts ── -->
+  <div class="chart-row">
+
+    <!-- Line: Total Worktime by Date -->
+    <div class="chart" style="flex:1">
+      <div class="chart-title">Total Worktime by Date</div>
+      <svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%;height:90px">
+        <polyline points="0,60 50,45 100,52 150,30 200,42 250,18 300,35"
+          fill="none" stroke="#F06020" stroke-width="2"/>
+        <polyline points="0,60 50,45 100,52 150,30 200,42 250,18 300,35 300,80 0,80"
+          fill="#F0602012" stroke="none"/>
+        <!-- Chat line -->
+        <polyline points="0,72 50,62 100,68 150,52 200,60 250,42 300,56"
+          fill="none" stroke="#2196F3" stroke-width="2" stroke-dasharray="5,3"/>
+        <line x1="0" y1="80" x2="300" y2="80" stroke="#eee" stroke-width="1"/>
+      </svg>
+      <div class="axis-labels"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span></div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#F06020"></span>Phone</span>
+        <span><span class="legend-dot" style="background:#2196F3"></span>Chat</span>
+      </div>
+    </div>
+
+    <!-- Line: Avg Handle Time by Date -->
+    <div class="chart" style="flex:1">
+      <div class="chart-title">Avg Handle Time by Date</div>
+      <svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%;height:90px">
+        <polyline points="0,42 50,38 100,48 150,32 200,50 250,36 300,42"
+          fill="none" stroke="#F06020" stroke-width="2"/>
+        <polyline points="0,42 50,38 100,48 150,32 200,50 250,36 300,42 300,80 0,80"
+          fill="#F0602012" stroke="none"/>
+        <!-- Chat line — slightly higher avg handle time -->
+        <polyline points="0,35 50,32 100,40 150,26 200,44 250,30 300,36"
+          fill="none" stroke="#2196F3" stroke-width="2" stroke-dasharray="5,3"/>
+        <line x1="0" y1="80" x2="300" y2="80" stroke="#eee" stroke-width="1"/>
+      </svg>
+      <div class="axis-labels"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span></div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#F06020"></span>Phone</span>
+        <span><span class="legend-dot" style="background:#2196F3"></span>Chat</span>
+      </div>
+    </div>
+
+    <!-- Bar: Avg Handle Time by Department -->
+    <div class="chart" style="flex:1">
+      <div class="chart-title">Avg Handle Time by Department</div>
+      <div class="bar-row"><span class="bar-dept">Claims</span><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><span class="bar-val">5:12</span></div>
+      <div class="bar-row"><span class="bar-dept">Care Centre</span><div class="bar-track"><div class="bar-fill" style="width:88%"></div></div><span class="bar-val">4:34</span></div>
+      <div class="bar-row"><span class="bar-dept">Support</span><div class="bar-track"><div class="bar-fill" style="width:72%"></div></div><span class="bar-val">3:44</span></div>
+      <div class="bar-row"><span class="bar-dept">Sales</span><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><span class="bar-val">2:05</span></div>
+      <div class="bar-row"><span class="bar-dept">(NULL)</span><div class="bar-track"><div class="bar-fill" style="width:22%"></div></div><span class="bar-val">1:08</span></div>
+    </div>
+
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── Matrix ── -->
+  <div class="matrix">
+    <div class="matrix-title">Agent Detail — Department → Agent</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Department / Agent</th>
+          <th>Total Calls</th>
+          <th>Total Worktime</th>
+          <th>Avg Handle Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="dept-row"><td colspan="4">Care Centre</td></tr>
+        <tr><td>Alisha Barrett</td><td>1,842</td><td>124:18:00</td><td>0:04:03</td></tr>
+        <tr><td>April Sadler</td><td>1,604</td><td>108:44:00</td><td>0:04:04</td></tr>
+        <tr class="dept-row"><td colspan="4">Claims</td></tr>
+        <tr><td>Amanda Howdin</td><td>3,210</td><td>278:22:00</td><td>0:05:12</td></tr>
+        <tr><td>Amie Flynn</td><td>988</td><td>85:44:00</td><td>0:05:12</td></tr>
+        <tr class="dept-row"><td colspan="4">Sales</td></tr>
+        <tr><td>Amy Riggs</td><td>412</td><td>14:22:00</td><td>0:02:05</td></tr>
+        <tr><td>Brodee Augustine</td><td>380</td><td>13:16:00</td><td>0:02:06</td></tr>
+        <tr class="dept-row"><td colspan="4">Support</td></tr>
+        <tr><td>Brooke Stewart</td><td>1,120</td><td>69:52:00</td><td>0:03:44</td></tr>
+        <tr><td>Chad Sagun</td><td>874</td><td>54:30:00</td><td>0:03:44</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>Total</td><td>106,998</td><td>6581:35:03</td><td>00:03:41</td></tr>
+      </tfoot>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

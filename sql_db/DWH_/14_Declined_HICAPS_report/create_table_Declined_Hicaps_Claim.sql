@@ -1,0 +1,27 @@
+CREATE TABLE SILVER.dbo.Declined_Hicaps_Claim (
+    Claim_ID                    DECIMAL(9,0)    NOT NULL,
+    Claim_Line_ID               DECIMAL(9,0)    NOT NULL,
+    Membership_ID               DECIMAL(9,0)    NULL,
+    Status_Date                 DATE            NULL,
+    Status_Date_Month_Year      VARCHAR(8)      NULL,       -- FORMAT('MMM yyyy')
+    Create_Operator             NVARCHAR(50)    NULL,
+    Assessing_Code_Type         DECIMAL(3,0)    NULL,
+    Item_Number                 NVARCHAR(50)    NULL,
+    Service_Type                NVARCHAR(50)    NULL,
+    Branch                      VARCHAR(60)     NULL,
+    Main_Reference_Type         CHAR(1)         NULL,
+    Reference_Type              CHAR(1)         NULL,
+    Reference_Create_Operator   CHAR(16)        NULL,
+    Reference_Create_Date       DATE            NULL,
+    Reference_Description       VARCHAR(15)     NULL,
+    Sub_Sub_Ref_Type_ID         DECIMAL(9,0)    NULL,
+    Cover_Version               DECIMAL(9,0)    NULL,
+    Cover_Type                  CHAR(1)         NULL,
+    Status_Flag                 CHAR(1)         NULL,
+    Cover_State                 CHAR(3)         NULL,
+    Cover_From_Date             DATE            NULL,
+    Termination_Date            DATE            NULL,
+    Cover                       VARCHAR(500)    NULL,
+    Fix_Code                    VARCHAR(15)     NULL,
+    Product_Description         VARCHAR(8000)   NULL
+);
