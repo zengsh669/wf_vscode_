@@ -1,12 +1,12 @@
 USE SILVER;
 GO
 
-CREATE OR ALTER PROCEDURE dbo.usp_Load_Agent_Agreement_Renewal
+CREATE OR ALTER PROCEDURE dbo.LoadAgentAgreementStatus
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    TRUNCATE TABLE SILVER.dbo.Agent_Agreement_Renewal;
+    TRUNCATE TABLE SILVER.dbo.AgentAgreementStatus;
 
     ;WITH
     AgentBase AS (
@@ -201,7 +201,7 @@ BEGIN
         LEFT JOIN BillingFrequencyCTE bf ON bf.membership_id = ma.membership_id
         LEFT JOIN MemberGroupCTE mg    ON mg.membership_id = ma.membership_id
     )
-    INSERT INTO SILVER.dbo.Agent_Agreement_Renewal (
+    INSERT INTO SILVER.dbo.AgentAgreementStatus (
         [Agent ID], [group_type], [Agency], [Commencement Date], [Expiry Date], [Discount Amount],
         [Agreement Status], [NPrint Flag], [Agent Name], [Termination Date], [create_operator],
         [Create Date], [update_operator], [Update Date], [Create Monthyear],

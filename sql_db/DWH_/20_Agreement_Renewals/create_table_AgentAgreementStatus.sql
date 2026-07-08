@@ -1,4 +1,7 @@
-CREATE TABLE SILVER.dbo.Agent_Agreement_Renewal (
+-- Run this first to drop the existing (legacy) AgentAgreementStatus table before recreating it:
+-- DROP TABLE SILVER.dbo.AgentAgreementStatus;
+
+CREATE TABLE SILVER.dbo.AgentAgreementStatus (
     [Agent ID]                                     DECIMAL(9,0)   NOT NULL,
     [group_type]                                    CHAR(1)        NULL,
     [Agency]                                        VARCHAR(60)    NULL,
@@ -38,3 +41,4 @@ CREATE TABLE SILVER.dbo.Agent_Agreement_Renewal (
     [Detrimental Comms Flag]                        VARCHAR(4)     NULL,
     [Member Added Within 60 Days]                   VARCHAR(4)     NULL
 );
+GO
