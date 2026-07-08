@@ -10,14 +10,29 @@ SILVER table consumed directly by reporting / Power BI.
 - rpsqlrp01 / paragonreporting — Westfund member system (SQL, direct connect)
 - Excel file — manual agency exclusion list on prdqs01_atobi (Manual Data library)
 
-**Architecture decision:** No GOLD view is built. The entire Qlik script produces a
-single wide table (`Agent`, renamed repeatedly through the load script) — this maps
-to one SILVER table: `Agent_Agreement_Renewal`. Two Qlik source objects that are
-themselves SQL Server views (`MemberPaymentFrequencyLatest`, and the "latest form"
-portion of `MemberCorrespondance`) are inlined as CTEs inside the load SP rather than
-built as separate Silver objects — see [Nested View Dependencies](#nested-view-dependencies).
-The Excel exclusion list (`agencies_to_exclude_(March_2026).xlsx`) is **not** loaded
-into SQL at all; it is applied independently in Power BI.
+**Architecture decision:** The entire Qlik script produces a single wide table (`Agent`,
+renamed repeatedly through the load script) — this maps to one SILVER table and one
+GOLD view. Two Qlik source objects that are themselves SQL Server views
+(`MemberPaymentFrequencyLatest`, and the "latest form" portion of `MemberCorrespondance`)
+are inlined as CTEs inside the load SP rather than built as separate Silver objects —
+see [Nested View Dependencies](#nested-view-dependencies). The Excel exclusion list
+(`agencies_to_exclude_(March_2026).xlsx`) is **not** loaded into SQL at all; it is
+applied independently in Power BI.
+
+**⚠️ Object naming — deviates from project convention:** The SILVER table and SP were
+translated with new names (`Agent_Agreement_Renewal` / `usp_Load_Agent_Agreement_Renewal`,
+still reflected in the "Silver Table" section and generated-file lists below), but the
+**final deployed objects reuse the pre-existing legacy names**: `SILVER.dbo.AgentAgreementStatus`
+(table) and `dbo.LoadAgentAgreementStatus` (SP). Reason: an ADF pipeline already calls
+`[dbo].[LoadAgentAgreementStatus]` by exact name (Stored Procedure activity, no parameters,
+Linked Service `PRDSQL05_SILVER`) — renaming would require an ADF change. Instead, the old
+`AgentAgreementStatus` table (which only covered the Agent-base + Agreement Status portion
+of the Qlik script, via `[dbo].[LoadAgentAgreementStatus]`, and had known bugs — wrong
+`TerminationDate` source column, non-faithful `NPrintFlag` logic, `DECIMAL(5,2)` discount
+precision) is dropped and rebuilt under the same name with the full 38-column structure and
+faithful logic documented in this file. Power BI was confirmed to have no direct reference
+to the legacy `AgentAgreementStatus` table before this change was made. See generated files:
+`create_table_AgentAgreementStatus.sql`, `usp_LoadAgentAgreementStatus.sql`.
 
 ---
 
@@ -168,9 +183,59 @@ authoritative record of the precedence decision instead.
 | `Detrimental Comms Flag` | derived (Agreement Status = 'Expiring in 45 Days' AND Has Form Generated Last 60 Days = 'Yes') | VARCHAR(4) | 'Flag'/'OK' |
 | `Member Added Within 60 Days` | derived (memship_status='A' AND Member Agent Commencement Date within 60 days before Expiry Date) | VARCHAR(4) | 'Flag'/'OK' |
 
-**Generated files:**
-- `create_table_Agent_Agreement_Renewal.sql`
-- `usp_Load_Agent_Agreement_Renewal.sql`
+**Generated files (original translation names — see naming note above for actual deployed names):**
+- `create_table_Agent_Agreement_Renewal.sql` → deployed as `create_table_AgentAgreementStatus.sql`
+- `usp_Load_Agent_Agreement_Renewal.sql` → deployed as `usp_LoadAgentAgreementStatus.sql`
+
+---
+
+## Gold View
+
+### `GOLD.dbo.vw_Agreement_Renewals`
+
+Built after reviewing the actual QlikSense app UI (all 3 sheets: *Summary* / *Corporate
+Agreement Status* / *Agents Updated or Added Monthly*) and cross-referencing every column
+shown in each sheet's field list against the 38 columns in `SILVER.dbo.AgentAgreementStatus`.
+Only columns confirmed as actually consumed by the app are exposed; unused columns are
+dropped rather than passed through, keeping the Gold layer to what reporting actually needs.
+
+**Method:** user provided field-list screenshots for all 3 sheets plus the Set Analysis
+expressions in use; each field was matched 1:1 against the Silver table's columns.
+
+**Columns included (29 of 38):** `Agent ID`, `Agency`, `Commencement Date`, `Expiry Date`,
+`Discount Amount` (shown in-app as "Agent Discount %"), `Agreement Status`, `NPrint Flag`,
+`Agent Name`, `Termination Date`, `create_operator`, `Create Date`, `update_operator`,
+`Update Date`, `Member Agent Term Date`, `Member Agent Commencement Date`, `membership_id`,
+`memship_status`, `Current PTD`, `Ortto Key`, `Main Member Surname`, `LatestReceiptAmount`,
+`DiscountOnLatestReceipt`, `Discount%OnLatestReceipt`, `Product Description`,
+`Billing Frequency`, `Group Description`, `Expired Agreement Active Member Agent Flag`,
+`Detrimental Comms Flag`, `Member Added Within 60 Days`.
+
+**Columns excluded (9, confirmed unused across all 3 sheets):** `group_type`,
+`Create Monthyear`, `person_id`, `Form ID`, `create_datetime`, `Group ID`,
+`Billing Group Commencement Date`, `membership_group_version`, and
+`Has Form Generated Last 60 Days` (an intermediate value feeding `Detrimental Comms Flag`,
+not itself displayed anywhere — excluded to keep the view to display-consumed columns only;
+full traceability is still available by querying the underlying Silver table directly).
+
+**Calculated fields identified in-app but deliberately NOT added to the view (left for
+Power BI to compute, per user decision):**
+- `Discount %` = `Num([Discount%OnLatestReceipt]/100, '0.00%')`
+- `Latest Receipt Amt (Discount Removed)` = `LatestReceiptAmount + DiscountOnLatestReceipt`
+
+**DISTINCT:** the view wraps its SELECT in `SELECT DISTINCT`. Reason: dropping 9 columns
+that may hold distinguishing values (e.g. two Silver rows differing only in `Group ID`)
+could otherwise surface as duplicate rows once those columns are removed from the
+projection — DISTINCT guards against that at negligible cost for a view (not materialised).
+
+**Excel exclusion list note:** none of the 3 sheets were found to directly reference
+`Exclude_Flag` or any exclusion-related field in their column lists or calculation
+conditions checked. The exclusion logic may apply via a filter object not captured in the
+column-list screenshots, or may simply not be used on these 3 sheets. This does not change
+the decision to keep exclusion logic out of SQL (see Excel exclusion list row below) —
+noted here only so the absence isn't mistaken for an oversight.
+
+**Generated file:** `vw_Agreement_Renewals.sql`
 
 ---
 
@@ -178,10 +243,10 @@ authoritative record of the precedence decision instead.
 
 | Object | Reason |
 |---|---|
-| `Exclude_Flag` SQL logic (Excel exclusion list) | `agencies_to_exclude_(March_2026).xlsx` is applied independently in Power BI, not loaded into SILVER — user decision |
+| `Exclude_Flag` SQL logic (Excel exclusion list) | `agencies_to_exclude_(March_2026).xlsx` is applied independently in Power BI, not loaded into SILVER or GOLD — user decision |
 | Separate Silver table/view for `MemberPaymentFrequencyLatest` | Inlined as CTE inside the load SP — user decision, source tables are plain BRONZE tables with no further dependencies |
 | BRONZE import of `form_archive` / `forms` | `BRONZE.dbo.MemberCorrespondance` already exists as an equivalent pre-built object; importing the large underlying detail tables was deemed not worth the cost |
-| `GOLD.dbo.vw_Agent_Agreement_Renewal` | Single Silver table is consumed directly; no aggregation/join needed at Gold layer |
+| `Discount %` / `Latest Receipt Amt (Discount Removed)` as Gold view columns | Both are simple in-app calculated fields; user decided to compute them in Power BI rather than materialise them in the Gold view |
 
 ---
 
@@ -191,8 +256,9 @@ authoritative record of the precedence decision instead.
 sql_db/DWH_/20_Agreement_Renewals/
 ├── Agreement_Renewals.md                        ← Qlik source (existing)
 ├── DESIGN.md                                     ← this file
-├── create_table_Agent_Agreement_Renewal.sql
-└── usp_Load_Agent_Agreement_Renewal.sql
+├── create_table_AgentAgreementStatus.sql         ← deployed name (translation name: create_table_Agent_Agreement_Renewal.sql)
+├── usp_LoadAgentAgreementStatus.sql              ← deployed name (translation name: usp_Load_Agent_Agreement_Renewal.sql)
+└── vw_Agreement_Renewals.sql
 ```
 
 ---
@@ -220,7 +286,9 @@ reviewed with the user and left as-is:
 Single Silver SP using `TRUNCATE + INSERT` full refresh pattern:
 
 ```
-1. usp_Load_Agent_Agreement_Renewal
+1. LoadAgentAgreementStatus   (deployed name; translation name usp_Load_Agent_Agreement_Renewal)
 ```
 
 No dependency ordering required — this is the only Silver object produced by this project.
+The Gold view (`vw_Agreement_Renewals`) requires no separate refresh — it reads live from
+the Silver table.
