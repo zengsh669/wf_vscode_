@@ -211,3 +211,18 @@
 - SILVER · `dbo.Arrears_Report`  
 
 ---
+
+## Agreement Renewals
+
+**Workspace:** Developer_Workings  
+**Size Bucket(MB):** 5  
+**Scheduled Refresh:** At 8:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
+***Notes:***
+- *DimDate till 30/06/2027*
+- *distinct_agent_monthly and 2 filter measures*
+
+**Tables / Views:**
+- GOLD · `dbo.vw_Agreement_Renewals`
+- SILVER · `--`  
+
+---
