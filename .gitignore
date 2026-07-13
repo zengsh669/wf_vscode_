@@ -13,7 +13,7 @@ sql_db/personal_notes_.md
 sql_db/visualizations/
 sql_db/movement/
 sql_db/claims/
-sql_db/Lib_Westfund/__pycache__/
+__pycache__/
 
 # JSON parameters
 sql_db/ADF_parametres/*.json
