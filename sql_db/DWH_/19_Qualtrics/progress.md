@@ -1,10 +1,30 @@
 # Qualtrics 数据接入 — 进度记录
 
-最后更新：2026-07-03
+最后更新：2026-07-13
 
 ## 目标
 
-把 Qlik 里现有的 Qualtrics NPS/满意度调查数据加载逻辑迁移到 Python/SQL Server。核心目标已收窄为：**用 `qualtrics_fetch.ipynb` 复刻 `Qualtrics_NPS_Score.md`（Qualtrics NPS Score App）里目前仍在生效的逻辑**——即6份问卷 QVD 合并成 `NPS_Score` 这一段。ADF Pipeline 的探索作为并行/备选路径保留，但因遇到 CSV 解析限制，目前主线转向纯 Python 方案。
+把 Qlik 里现有的 Qualtrics NPS/满意度调查数据加载逻辑迁移到 Python/SQL Server。
+
+**目标经历过一次范围调整，以下是最新状态（2026-07-13）**：最初的核心目标是"用
+`qualtrics_fetch.ipynb` 复刻 `Qualtrics_NPS_Score.md` 里的 `NPS_Score` 合并逻辑"（详见下方
+"关键发现"一节，此目标本身没有变化，验证已完成）。但**落地到生产部署时**，范围被进一步拆分：
+正式部署脚本 `qualtrics_fetch.py`（`DataEngineering/QualtricsData/`，独立 ADO 仓库）**只负责
+6 份问卷各自抓取写入 `BRONZE.qua.*`**，`NPS_Score` 的合并改为交给 SQL Server 端 Stored Procedure
+处理（尚未编写）——即最初"用 Python 完整复刻 NPS_Score"的目标，现在拆成"Python 管抓取、SQL
+管合并"两段。详见下方"部署路径确定与验证"及"`qualtrics_fetch.py`：正式抓取脚本落地"两节。
+
+ADF Pipeline 的探索作为并行/备选路径保留，但因遇到 CSV 解析限制，目前主线转向纯 Python 方案。
+
+**本文档涉及的几份关键代码文件，容易因命名相似而混淆，先在此做区分**：
+- `qualtrics_data_extract_fetch.ipynb`（`sql_db/DWH_/19_Qualtrics/`）—— 全字段复刻版 notebook，
+  复刻 `Qualtrics_Data_Extract.md` 的完整逻辑，经 round 5-13 多轮审查验证，是目前**逻辑层面的
+  权威版本**
+- `qualtrics_fetch.ipynb`（`sql_db/DWH_/19_Qualtrics/`）—— 简化版 notebook，只做 `NPS_Score`
+  合并逻辑的复刻，本文档最早的产出
+- `qualtrics_fetch.py`（`DataEngineering/QualtricsData/`，**注意文件名与上面的 `.ipynb` 几乎相同
+  但不是同一份东西**）—— 这次新增的**正式部署脚本**，其抓取+转换逻辑搬运自
+  `qualtrics_data_extract_fetch.ipynb`（全字段版），不是 `qualtrics_fetch.ipynb`（简化版）
 
 ## 关键发现：三份 Qlik/文档之间的关系
 
@@ -17,6 +37,10 @@
 三份文档已原样存档在本目录（`Qualtrics_Data_Extract.md`、`Qualtrics_NPS_Score.md`），供比对。
 
 ## 涉及的 6 份 Qualtrics 源问卷
+
+**注：下表行数是 2026-07-03 那次抓取的快照。下方"`qualtrics_fetch.py`：正式抓取脚本落地"一节
+（2026-07-13）有另一份行数更新的表格——两者数字不同属正常（Qualtrics 问卷持续有新回复进来），
+不代表数据矛盾或错误，只是不同时间点各自的抓取结果。**
 
 | 问卷 | Survey ID | 原始行数 | 有 Member Number 行数 |
 |---|---|---|---|
@@ -86,6 +110,94 @@ REST API 这条路径的根本限制，不是实现疏忽。
 1. ADF 的 Copy Activity 无法正确处理评论字段内嵌换行符（RFC 4180 引号内换行），在 CSAT（39,047行）上稳定复现解析报错；MentalHealth 等小数据集能跑通只是侥幸未触发，不代表问题已解决
 2. Qualtrics 数据字段编号不统一且会随问卷编辑漂移，代码处理比 ADF 图形化配置更灵活
 3. Python 把6份问卷逻辑集中在一个文件里，比 ADF 每份问卷要重新配置多个界面更易管理
+
+## 部署路径确定与验证（2026-07-13）
+
+调度方案已从"待定"推进为**确定并部分验证成功**：
+
+- **Azure Function App 路径受阻**：尝试在 Azure Portal 创建 Function App（Flex Consumption 计划）时，
+  卡在需要注册 `Microsoft.App` 资源提供程序这一步，账号权限不足（`AuthorizationFailed`），且无法
+  自行创建 Resource Group。此路径搁置。
+- **确定改用：VM（IR Machine）+ Windows Task Scheduler**。VSCode/本地账号对 SQL Server 仅有只读权限，
+  只有 Integration Runtime 机器的身份被确认有写入可能，由 IT（Trev）负责该机器的环境与调度配置。
+- **建立独立的 ADO 仓库 `DataEngineering`**（Azure DevOps，与本仓库 `wf_vscode_` 完全独立，remote
+  分别指向 GitHub 与 ADO）。已配置 CI Pipeline（`azure-pipelines.yml`）：push 到 `main` 自动打包成
+  Artifact，验证正常运作。原负责"打包产物→VM"这一步的 `copy.ps1`，一度确认从未被任何流程实际
+  调用，后由 Trev 删除（commit "remove not required files"）——目前 ADO Artifact 到 VM 的落地机制
+  待 Trev 确认（可能已改用 Release Pipeline 网页配置，或其他方式）。
+- **`write_test.py`（`DataEngineering/QualtricsData/`）** ——独立于 Qualtrics API 的最小化 SQL Server
+  写入测试脚本，用于单独验证"这台机器的身份能否写入 SQL Server"这一根本问题。经 3 轮子代理
+  独立审查 + 用户本人审查，修复以下 4 处 bug：
+  1. `ensure_table_exists()` 建表后调用了 `cursor.commit()`——pyodbc 的 `Cursor` 对象没有
+     `.commit()` 方法，只有 `Connection` 有；改为 `conn.commit()`，函数签名相应从
+     `(cursor, table_name)` 改为 `(conn, cursor, table_name)`。
+  2. 一处注释引用了已被用户要求删除的旧文件 `qualtrics_poc_ir_test.py`（早期的完整 POC 抓取
+     版本，后按用户指示删除，改用当前简化的手写 3 行测试数据方案）——改写为直接描述做法本身，
+     不再引用已不存在的文件。
+  3. `write_to_sql_server()` 原本没有 `try/finally`，如果建表/写入中途报错（例如实际遇到的
+     `CREATE TABLE permission denied`），`cursor.close()`/`conn.close()` 永远不会执行，导致
+     连接泄漏——尤其不可接受，因为脚本以后会被 Task Scheduler 反复无人值守调用。已改为把
+     连接相关操作包进 `try`，`conn.close()` 移入 `finally`。
+  4. `main()` 里 `write_log_file()` 本身没有异常保护——如果写日志这一步失败（只读共享文件夹、
+     磁盘满等），会抛出一个未被捕获的异常，导致"作为唯一诊断依据的 JSON 日志"这个设计目的
+     直接落空。已包一层 `try/except`，失败时改为把 traceback 打印到 stderr 作为兜底，
+     并通过 `_error_detected_local` 变量正确设置最终的成功/失败判定。
+
+  另有 2 处子代理提出但经用户判断为低优先级、明确决定不修的建议（`_error_detected_local`
+  变量作用域的防御性写法、`cursor.close()`的冗余调用），均评估过实际影响可忽略。
+
+  完成以上修复后：
+  - 本机测试：连接成功，但在 `CREATE TABLE` 时被拒绝（`permission denied in database 'BRONZE'.
+    (262)`）——确认本地账号无写入权限，属预期结果。
+  - **VM 端测试：写入成功**（`BRONZE.dbo.Qualtrics_Write_Test`，3 行测试数据可查询确认）——首次
+    确认 VM 身份具备 SQL Server 写入/建表权限，此前悬而未决的核心阻塞点已解决。
+- **ODBC 驱动版本差异**：本机装的是 `ODBC Driver 17`，VM 端为 `ODBC Driver 18`（Trev 已将 `write_test.py`
+  对应版本改为 18，commit "update driver reference to 18"）。`qualtrics_fetch.py`（见下）连接字符串
+  按 VM 环境使用 18；本机运行时会在建立连接阶段报 `IM002 Data source name not found`，属预期内的
+  环境差异，不代表代码问题。
+- **VM 系统时区尚未确认**——`datetime.now()` 写入的时间戳（如 `InsertedAt`）依赖 VM 操作系统本身
+  设置的时区，代码本身不做任何时区转换，需另行向 Trev 确认是悉尼时间还是 UTC。
+
+## `qualtrics_fetch.py`：正式抓取脚本落地（2026-07-13）
+
+在 `write_test.py` 验证的骨架基础上，正式编写了 Qualtrics 6 份问卷的抓取脚本：
+`DataEngineering/QualtricsData/qualtrics_fetch.py`（独立于本仓库，由 ADO 仓库 `DataEngineering`
+追踪，已 commit + push）。
+
+**范围界定**：本脚本只负责 6 份问卷各自的抓取、标准化、写入 `BRONZE.qua.*`（`Qualtrics_CSAT` /
+`Qualtrics_POC` / `Qualtrics_HealthServices` / `Qualtrics_MentalHealth` / `Qualtrics_Wellbeing` /
+`Qualtrics_Wellbeing_V2`，schema 为 `qua`）。**`NPS_Score` 的合并逻辑不在本脚本中实现**——按决定
+改为由 SQL Server 端 Stored Procedure 读取这 6 张表做 `UNION ALL` + 过滤，SP 尚未编写。
+
+**逻辑来源**：直接搬运 `qualtrics_data_extract_fetch.ipynb` 的 6 个 `standardise_*_full()` 函数、
+全部共享 helper 函数（`notnull_or_blank`/`blank_to_null`/`multiselect_join` 等）与硬编码映射表
+（`PROGRAM_PROVIDER_ID_MAP` 等），经子代理逐行核对确认**零差异**（含全部 "Round N fix" 修正过的
+字段）。
+
+**基础设施**（继承自 `write_test.py`，非本次新增设计）：JSON 日志（存于独立的 `logs/` 子文件夹，
+调用时自动创建）、`try/finally` 连接清理、单一 survey 失败不影响其余 5 份继续处理、日志写入本身
+的容错兜底。查询问卷最新名称（`Survey Name`）的 API 调用失败时会自动降级使用硬编码的
+`SURVEY_NAMES`，不阻断整体流程——这是本次新增的容错设计，notebook 原逻辑没有这一层（无
+容错，失败即报错），属于"无人值守定时执行"场景下的主动补强，非复刻遗漏。
+
+**真实数据验证**（本机执行，2026-07-13）：6 份问卷全部成功抓取 + 标准化。**下表行数是这次
+（2026-07-13）的抓取快照，与上方"涉及的 6 份 Qualtrics 源问卷"一节的 2026-07-03 数字不同，
+属正常的数据增长，不是矛盾**：
+
+| 问卷 | 抓取行数 | 标准化后列数 |
+|---|---|---|
+| CSAT | 39,152 | 37 |
+| POC | 9,080 | 39 |
+| HealthServices | 18 | 36 |
+| MentalHealth | 4 | 36 |
+| Wellbeing | 25 | 37 |
+| WellbeingV2 | 330 | 35 |
+
+列数与子代理审查 notebook 时确认的数字完全一致。写入 SQL Server 这一步因本机 ODBC 驱动版本
+（17）与代码指定版本（18）不匹配，在建立连接阶段即失败（`IM002`），未能在本机验证到"写入"
+这一步——预期内的环境差异，非代码缺陷，待 VM 端（已确认装 18）实际测试。
+
+**API Token**：延续本仓库既有决定，先明文硬编码在代码中以便验证跑通，环境变量化仍在长期待办中。
 
 ## ADF Pipeline 探索记录（备选路径，非当前主线）
 
@@ -220,8 +332,17 @@ baseline（2026-07-03，对应本轮全部核实完成后的状态）。
 
 ## 待办
 
+- [x] ~~若要落库 SQL Server，需决定用 pandas + pyodbc 直接写入，还是重新捡起 ADF/Data Flow 路径~~
+      —— 已决定用 pandas + pyodbc，`qualtrics_fetch.py` 已落地，6 份问卷抓取+转换已用真实数据验证通过
+- [x] ~~notebook 定时调度方案尚未落地~~ —— 已确定 VM + Windows Task Scheduler，VM 端写入 SQL Server
+      已验证成功（`write_test.py`）
+- [ ] **（阻塞）** 向 Trev 确认：`copy.ps1` 被删除后，ADO Artifact 到 VM 的同步机制现在是什么
+- [ ] **（阻塞）** 向 Trev 确认 VM 系统时区（悉尼时间 or UTC），影响时间戳字段解读
+- [ ] 在 VM 上实际运行 `qualtrics_fetch.py`，验证 6 张表写入 `BRONZE.qua.*` 成功（本机受限于 ODBC
+      驱动版本不匹配，未能验证到写入这一步）
+- [ ] 编写 `NPS_Score` 的 SQL Server 端 Stored Procedure（读取 6 张 `qua` 表做 `UNION ALL` + 按
+      `Member Number` 过滤空值），替代原计划中 Python 侧的 concat 逻辑
 - [ ] （可选，超出当前目标范围）`DataforBI`/`DataforHCS_NPS_Calcs` 的复刻，需先补 Feedback 类字段
-- [ ] （长期）API Token 改用环境变量/Key Vault，避免明文
-- [ ] （长期）若要落库 SQL Server，需决定用 pandas + pyodbc 直接写入，还是重新捡起 ADF/Data Flow 路径解决 CSV 解析问题
-- [ ] （长期）notebook 定时调度方案尚未落地——曾讨论 Task Scheduler（需确认可用的常开机内网服务器）vs Azure Function（需确认云端能否访问内网 SQL Server，若只落地 CSV 到共享盘则无此顾虑）
+- [ ] （长期）API Token 改用环境变量/Key Vault，避免明文——本仓库与 `DataEngineering` 仓库均维持
+      「先跑通再处理」的决定
 - [ ] （长期）`qualtrics_survey_change_check.ipynb` 目前只能靠人工记得去跑，没有自动化触发机制；如果之后有定时调度基础设施，可以考虑让这个检测作为每次主 notebook 运行前的前置步骤
