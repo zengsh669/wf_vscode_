@@ -1,6 +1,6 @@
 # Qualtrics 数据接入 — 进度记录
 
-最后更新：2026-07-13
+最后更新：2026-07-14
 
 ## 目标
 
@@ -199,6 +199,84 @@ REST API 这条路径的根本限制，不是实现疏忽。
 
 **API Token**：延续本仓库既有决定，先明文硬编码在代码中以便验证跑通，环境变量化仍在长期待办中。
 
+## VM 部署确认与 `qualtrics_fetch.py` 二次审查（2026-07-14）
+
+- **VM 端确认**：Trev 已把 `qualtrics_fetch.py` 部署到 VM，`BRONZE.qua` 下 6 张表（`Qualtrics_CSAT`
+  等）已确认存在。**尚未确认的是**：VM 上运行的是否已经是最新版本代码（见下方 ADO→VM 同步机制
+  仍待确认这一点）——`azure-pipelines.yml` 只做打包，不做部署，`copy.ps1` 已被删除且未替换，
+  所以"push 到 ADO"和"VM 上代码更新"之间没有已知的自动化链路，需要 Trev 说明现在是怎么同步的。
+- **`qualtrics_fetch.py` 新增日志清理功能**：`_prune_old_log_files()`，每次 `write_log_file()`
+  写完新日志后调用，只保留 `logs/` 文件夹里最新 5 份 JSON 日志（按文件名时间戳排序），避免
+  长期无人值守运行后日志无限累积。已走 PR 流程（`prune-old-logs` 分支）合并进 `main`，ADO
+  Pipeline 确认打包成功（commit `f71b8f5d`）。
+- **两次独立子代理复核 `qualtrics_fetch.py` vs `qualtrics_data_extract_fetch.ipynb`**（一次在
+  PR 合并前，一次在这之后，均为全新发起、不依赖此前审查记忆）：均为 **PASS，零差异**。第二次
+  用 AST 解析两边代码结构逐行 diff（而非仅肉眼比对），确认 6 个 `standardise_*_full()` 函数、
+  全部共享 helper、`fetch_survey_responses()`、硬编码常量/映射表均完全一致。`fetch_surveys_metadata()`
+  的简化（脚本只提取 `{id: name}` 而非 notebook 完整的 12 列 DataFrame）确认是合理简化，不影响
+  6 份问卷标准化结果，因为那 12 列里其余字段本来就不被任何 `standardise_*_full()` 使用。
+
+## `nps_score_validation_query.sql`：NPS_Score 合并逻辑的 SQL 验证查询（2026-07-14）
+
+按用户决定：**先写一段独立的验证用 `SELECT` 查询（非 Stored Procedure），方便分享给同事核对，
+确认逻辑无误后再包装成正式的 `usp_Load_NPS_Score`**。文件位置：
+`sql_db/DWH_/19_Qualtrics/nps_score_validation_query.sql`。
+
+**逻辑对照**：还原 `Qualtrics_NPS_Score.md` 里唯一生效的那段（`LOAD * ... CONCATENATE ...
+WHERE Len(Trim("Member Number"))>0`），读取 `BRONZE.qua` 下 6 张表，用 `UNION ALL` 对应
+Qlik 的 `CONCATENATE`，`LEN(LTRIM(RTRIM([Member Number])))>0` 对应 `Len(Trim(x))>0`；每张表
+各自先过滤再 union，顺序与 Qlik 原文一致。
+
+**列对齐问题（SQL 与 Qlik/pandas 的关键差异）**：Qlik 的 `CONCATENATE` 和 pandas 的
+`pd.concat(sort=False)` 都会**自动**按列名对齐、取列并集、缺失列自动补 `Null()`/`NaN`——
+但 SQL 的 `UNION ALL` **没有**这个自动对齐能力，要求每个 `SELECT` 列数/顺序完全一致。因此
+这份查询里，每个 `SELECT` 都显式列出全部并集列，缺失的列用 `NULL AS [列名]` 手动补齐，这不是
+简化写法，而是 SQL 要达到与 Qlik/pandas 同等效果、必须付出的"手动翻译成本"。
+
+**列数/列名验证（三方交叉核对，非推断）**：
+1. 直接查询 `BRONZE.qua` 的 `INFORMATION_SCHEMA.COLUMNS`，拿到 6 张表各自真实列名（CSAT 37、
+   POC 39、HealthServices 36、MentalHealth 36、Wellbeing 37、Wellbeing_V2 35）
+2. 从 `qualtrics_data_extract_fetch.ipynb` 源代码用正则提取 6 个 `standardise_*_full()` 函数
+   里每一个 `out["列名"] = ...` 赋值，程序化算出列名并集
+3. 两者并集均为 **55 列**，逐一比对列名（不是只对数字），**完全一致**，包括顺序
+4. 初次编写这份 SQL 时手动整理并集列表遗漏了 8 列（误算成 47 列），已用上述方法重新核对、
+   改用真实数据重写，现在 SQL 文件的列清单已确认与 55 列并集完全对应
+
+**行数验证**：SQL 查询返回 48,549 行，notebook 那次运行是 48,550 行，差 1 行——与之前
+（2026-07-03）3 行差异是同一性质，判定为两次实际抓取的时间点不同、Qualtrics 期间有新回复
+进来导致，不是逻辑错误。
+
+**重要澄清——55 列不等于 Qlik `Qualtrics_NPS_Score.md` 的完整真实输出**：
+`Qualtrics_Data_Extract.md` 原文里，6 份问卷的 LOAD 语句都额外包含 5 个字段——
+`[Provider Type]`/`[Provider Address]`/`[Provider Suburb]`/`[Provider State]`/`[Provider Postcode]`
+（经 `ApplyMap` 查 Paragon BRONZE 表 / `BranchLocations.xlsx`，已用 grep 直接核实原文行号
+390-394、549-553、677-681、820-824、964-968、1106-1110 共 6 处全部存在）。`Qualtrics_NPS_Score.md`
+的 `LOAD *` 会读取 QVD 全部列，理论上真实 Qlik 输出应是 **60 列**（55 + 这 5 个 Provider 字段），
+比 notebook/SQL 复刻的 55 列多。这不是本轮审查发现的新 bug——排除这 5 个字段是项目一开始就
+明确的范围决定（见上方"已知的、明确排除的范围"一节），但此前没有把"55 列 vs 60 列"这个
+具体差距在文档里写清楚，容易让人误以为 55 列 = Qlik 完整输出，特此在此明确记录。
+
+## 架构方向讨论：dbt / Airflow 评估结论（2026-07-14，暂不采用）
+
+结合本项目未来可能扩展（新增下游 SP、新增 Qualtrics 相关 Dashboard）的预期，评估过是否应
+引入 dbt 和/或 Airflow 替代现有的"SP + Task Scheduler"方案。**结论：现阶段不引入**，理由：
+
+- `dbt-sqlserver` 不是 dbt 生态里的主流适配器（主流是 dbt-snowflake/bigquery/redshift/databricks），
+  社区支持、认证方式兼容性均不如主流适配器成熟，`Trusted_Connection` 认证是否被支持尚未验证
+- Fabric 生态本身（若公司未来迁移）目前也以原生工具（Dataflow Gen2/Notebook/Pipeline）为主流，
+  dbt 是面向"已有 dbt 使用习惯的团队"的补充选项，不是默认路径——现有的 SP 写法反而因为
+  Fabric Warehouse 底层同源于 SQL Server 引擎，天然对 Fabric 迁移友好
+- "dbt + Task Scheduler"这个组合本身发挥不出 dbt 真正的价值（自动依赖管理、`ref()` 排序）——
+  Task Scheduler 不理解 dbt 的依赖概念，只是"到点执行 `dbt run`"，dbt 真正该搭配的是 Airflow
+  这类懂依赖调度的工具，但目前只有 1 条转换链（NPS_Score SP），投入 Airflow 的学习/运维成本
+  不划算
+- 不建议将现有生产环境里正常运行的其他 SP（`01-12, 66` 项目文件夹下）批量迁移到 dbt——
+  这是重写已验证代码，风险（引入新 bug）远大于收益（这些 SP 之间大概率没有需要 dbt 管理的
+  复杂依赖关系）
+- **结论适用范围**：仅针对"现阶段该不该引入"，如果未来任务数量/依赖复杂度显著增加（比如
+  确认会有多个新 Dashboard 都依赖 Qualtrics 6 张 BRONZE 表），应重新评估，届时更合理的组合是
+  dbt（转换逻辑+依赖定义）+ Airflow（真正的依赖调度执行），而不是继续勉强用 Task Scheduler
+
 ## ADF Pipeline 探索记录（备选路径，非当前主线）
 
 Pipeline 名称：`Qualtrics`，流程：`StartExport`→`PollExport`(Until循环)→`DownloadAndUnzip`→`UnzipToCsv`→`CsvToSqlServer`。已验证 MentalHealth 这一份能完整跑通并写入 BRONZE（`qua.Qualtrics_Dental_NPS_Raw`，因跳过表头列名为 `Column_1,2...`）。CSAT/POC 因上述 CSV 解析问题未能接入。详细组件配置、报错分析见本文件历史版本（git log 或询问助手）。此路径按需可继续，但当前工作重心已转向 Python notebook。
@@ -336,12 +414,19 @@ baseline（2026-07-03，对应本轮全部核实完成后的状态）。
       —— 已决定用 pandas + pyodbc，`qualtrics_fetch.py` 已落地，6 份问卷抓取+转换已用真实数据验证通过
 - [x] ~~notebook 定时调度方案尚未落地~~ —— 已确定 VM + Windows Task Scheduler，VM 端写入 SQL Server
       已验证成功（`write_test.py`）
-- [ ] **（阻塞）** 向 Trev 确认：`copy.ps1` 被删除后，ADO Artifact 到 VM 的同步机制现在是什么
+- [x] ~~在 VM 上实际运行 `qualtrics_fetch.py`，验证 6 张表写入 `BRONZE.qua.*` 成功~~ —— Trev 已
+      部署，6 张表已在 `BRONZE.qua` 确认存在。**但仍需确认 VM 上跑的是否为最新版本代码**（见下方
+      ADO→VM 同步机制这一条，目前无法排除 VM 上是旧版本的可能性）
+- [ ] **（阻塞）** 向 Trev 确认：`copy.ps1` 被删除后，ADO Artifact 到 VM 的同步机制现在是什么——
+      `azure-pipelines.yml` 只做打包，没有部署步骤，需确认清楚每次 push 之后新代码多久/如何
+      同步到 VM，否则无法保证 VM 上运行的是最新版本（例如这次新增的日志清理功能是否已生效）
 - [ ] **（阻塞）** 向 Trev 确认 VM 系统时区（悉尼时间 or UTC），影响时间戳字段解读
-- [ ] 在 VM 上实际运行 `qualtrics_fetch.py`，验证 6 张表写入 `BRONZE.qua.*` 成功（本机受限于 ODBC
-      驱动版本不匹配，未能验证到写入这一步）
-- [ ] 编写 `NPS_Score` 的 SQL Server 端 Stored Procedure（读取 6 张 `qua` 表做 `UNION ALL` + 按
-      `Member Number` 过滤空值），替代原计划中 Python 侧的 concat 逻辑
+- [x] ~~编写 `NPS_Score` 的 SQL Server 端验证查询~~ —— `nps_score_validation_query.sql` 已完成，
+      55 列/行数均已验证（见上方专门一节），**下一步：分享给同事核对，确认无误后包装成正式的
+      `usp_Load_NPS_Score` 存储过程**（尚未开始）
+- [ ] 让 `qualtrics_fetch.py` 在 6 份问卷全部处理完后，自动调用 `usp_Load_NPS_Score`（一行
+      `cursor.execute("EXEC ...")`），解决"抓取→聚合"的顺序依赖，避免依赖 Task Scheduler 的
+      时间间隔猜测
 - [ ] （可选，超出当前目标范围）`DataforBI`/`DataforHCS_NPS_Calcs` 的复刻，需先补 Feedback 类字段
 - [ ] （长期）API Token 改用环境变量/Key Vault，避免明文——本仓库与 `DataEngineering` 仓库均维持
       「先跑通再处理」的决定
