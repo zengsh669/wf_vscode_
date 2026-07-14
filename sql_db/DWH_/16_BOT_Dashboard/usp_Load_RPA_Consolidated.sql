@@ -43,7 +43,15 @@ BEGIN
             timestampUsername,
             claimNumber,
             memberID,
-            claimType,
+            CASE
+                WHEN claimType = 'Prescriptions, Vaccinations and Injections' THEN 'Pharmacy'
+                WHEN claimType = 'Remedial Massage' THEN 'Remedial Massage'
+                WHEN claimType IN ('Acupuncture', 'Acupunture') THEN 'Acupuncture'
+                WHEN claimType = 'Chinese Herbalism' THEN 'Chinese Herbalism'
+                WHEN claimType = 'Physio' THEN 'Physio'
+                WHEN claimType = 'Dental' THEN 'Dental'
+                WHEN claimType = 'Other' THEN 'Other'
+            END AS claimType,
             claim_status,
             process_status,
             manualReviewerUsername,
@@ -211,7 +219,7 @@ BEGIN
             NULL               AS Item_Number,
             NULL               AS Line_Item_Number,
             NULL               AS Hippo_Service_Desc,
-            NULL               AS Hippo_Service_Type,
+            claimType          AS Hippo_Service_Type,
             'ClaimInfo'        AS Source,
             memberID           AS Membership_ID_HPC,
             process_remarks    AS Reasons_HPC,
