@@ -134,6 +134,40 @@ SQL SELECT  "cover_type",
     description
 FROM paragonreporting.dbo."cover_type";
 
+
+LIB CONNECT TO 'rpsqlrp01 - paragonreporting';
+ProviderGroupTypeMap:
+Mapping
+LOAD "provider_group_type",
+    description;
+SQL SELECT "provider_group_type",
+    description
+FROM paragonreporting.dbo."provider_group_type";
+
+MemberAddressMap:
+Mapping
+LOAD
+membership_id,
+postcode;
+SQL select distinct membership_id, postcode
+from paragonreporting.dbo."PersonAddressHomePostal";
+
+ProviderGroupMap:
+Mapping
+LOAD "provider_group_id",
+    description;
+SQL SELECT "provider_group_id",
+    description
+FROM paragonreporting.dbo."provider_group";
+
+RadiusMapping:
+Mapping
+LOAD
+    Postcode,
+    Radius
+FROM [lib://Manual Data (prdqs01_atobi)/Membership App 2/Care Centre Radius Mapping.xlsx]
+(ooxml, embedded labels, table is [300kmLithgowDentalC]);
+
 FinancialData:
 LOAD
     "Account Num",
@@ -958,12 +992,9 @@ Rename Table GroupKey3 to GroupKey;
 Inner Join (GroupKey)
 LOAD
     Postcode as postcode,
-    "Care Centre",
     Radius
 FROM [lib://Manual Data (prdqs01_atobi)/Membership App 2/Care Centre Radius Mapping.xlsx]
-(ooxml, embedded labels, table is CareCentresPostcodeRadius)
-Where Wildmatch([Care Centre], 'Lithgow Care Centre')
-and Wildmatch([Radius], 'Within 50Km');
+(ooxml, embedded labels, table is [300kmLithgowDentalC]);
 
 
 // Left join (GroupKey)
@@ -1261,5 +1292,106 @@ Drop Tables
 //     AttendedApptBase,
 //     Appointments_Next,
 //     Appointments_NextClean;
+
+LIB CONNECT TO 'rpsqlrp01 - paragonreporting';
+DentalClaims:
+LOAD "claim_id"&'|'&"claim_line_id" 													as CLAIMSKEY,
+    "claim_id",
+    "claim_line_id",
+    "provider_number_id",
+    "claim_type",
+    "membership_id",
+    Applymap('MemberAddressMap',membership_id) 											as MemberPostcode,
+    "person_id",
+    "bodypart_id",
+    "service_date" as status_date,
+    "person_id"&'-'&"service_date"														as VisitKey,
+    //"status_date",
+    monthname("service_date") 															as MonthYear,
+    "provider_group_id",
+    ApplyMap('ProviderGroupMap',"provider_group_id") 									as [Provider Group],
+    if(match(ApplyMap('ProviderGroupTypeMap',"provider_group_type"),'Practise'),'Westfund', 
+    if(isnull(ApplyMap('ProviderGroupTypeMap',"provider_group_type")),'External', 
+    ApplyMap('ProviderGroupTypeMap',"provider_group_type")))							as [Provider Group Type],
+    "product_id";
+SQL SELECT *
+FROM paragonreporting.dbo.claim_line
+WHERE service_date > '$(vStartDate_1)' and claim_type = 'A' and claim_line_status_type = 'P';
+
+
+join (DentalClaims)
+Load
+	"provider_number_id",
+	postcode 																			as ProviderPostcode,
+    suburb																				as ProviderSuburb,
+    // ApplyMap('RadiusMapping',postcode, 'Not within Range') 							as CompetitorPostcodeRadius,
+    provider_id;
+SQL SELECT provider_number_id,
+	postcode,
+    suburb,
+    provider_id
+FROM paragonreporting.dbo."provider_number";
+
+// RadiusTable: 
+// Load 
+// 'RadiusData' as Source,
+// VisitKey,
+// ProviderPostcode,
+// MemberPostcode
+
+
+Left Join (DentalClaims)
+LOAD
+    Postcode as [ProviderPostcode],
+    Radius as [CompetitorPostcodeRadius]
+FROM [lib://Manual Data (prdqs01_atobi)/Membership App 2/Care Centre Radius Mapping.xlsx]
+(ooxml, embedded labels, table is [300kmLithgowDentalC]);
+
+
+join (DentalClaims)
+Load
+	"provider_id",
+	provider_name 																		as ProviderName;
+SQL SELECT provider_id,
+	provider_name
+FROM paragonreporting.dbo."provider";
+
+Inner Join(DentalClaims)    /// General Claims Only
+LOAD "claim_id"&'|'&"claim_line_id" 													as CLAIMSKEY,
+    "service_type",
+    "item_number",
+    "service_type"&'|'&item_number 														as ITEMKEY,
+    "num_services",
+    fee,
+    benefit,
+    "change_short_desc",
+    "manual_benefit_reason_id";
+SQL SELECT *
+FROM paragonreporting.dbo."claim_generalitem"
+Where service_type = 'DENTAL';
+
+join(DentalClaims)
+LOAD
+    "service_type"&'|'&item_number 														as ITEMKEY,
+    item_number&' - '&description as [Treatment Description];
+SQL SELECT item_number, 
+	service_type,
+	description
+FROM paragonreporting.dbo."item";
+
+
+Concatenate (FinancialData)
+LOAD*,
+Num(If(Month([MonthYear]) >= 7,
+       Year([MonthYear])*100 + (Month([MonthYear])-6),
+       (Year([MonthYear])-1)*100 + (Month([MonthYear])+6)), '000000') AS Period;
+Load*, 
+    'CompetitorData' as [Source],
+Year(date(floor(status_date-1)))                                   as Year,   
+    Month(status_date) 											as [EndOfCalYearMonth],
+ If(Month([status_date]) >= 7,Year([status_date]) + 1,Year([status_date])) 		AS [Fin Year],       
+ If(Month([status_date]) >= 7,Month([status_date])-6,Month([status_date])+6) 		AS [Fin Period];
+Load * resident DentalClaims;
+Drop table DentalClaims;
 
 Exit Script;
