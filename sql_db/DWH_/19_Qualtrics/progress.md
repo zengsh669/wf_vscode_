@@ -202,9 +202,27 @@ REST API 这条路径的根本限制，不是实现疏忽。
 ## VM 部署确认与 `qualtrics_fetch.py` 二次审查（2026-07-14）
 
 - **VM 端确认**：Trev 已把 `qualtrics_fetch.py` 部署到 VM，`BRONZE.qua` 下 6 张表（`Qualtrics_CSAT`
-  等）已确认存在。**尚未确认的是**：VM 上运行的是否已经是最新版本代码（见下方 ADO→VM 同步机制
-  仍待确认这一点）——`azure-pipelines.yml` 只做打包，不做部署，`copy.ps1` 已被删除且未替换，
-  所以"push 到 ADO"和"VM 上代码更新"之间没有已知的自动化链路，需要 Trev 说明现在是怎么同步的。
+  等）已确认存在。
+- **ADO→VM 同步机制已完整确认（2026-07-14，通过实际触发一次部署 + 逐层查看日志验证，非推测）**：
+  机制不是 `copy.ps1`（已确认被删除），而是 ADO 的 **Classic Release Pipeline**（网页配置，
+  与仓库里的 `azure-pipelines.yml` 完全独立，不受这份 yml 控制）：
+  - 路径：ADO 网页 → Pipelines → **Releases** → **"Deploy to PRDIRN01"**（`PRDIRN01` 即 VM 主机名）
+  - 触发方式：**手动**——需要人（用户或 Trev）在这个 Release 页面点击 "Deploy"，不是 push 后自动执行。
+    也就是说目前是 **CI 全自动、CD 需一次人工触发**，不是完整无人值守的自动化链路
+  - 具体步骤（实际执行日志逐层验证）：
+    1. `Initialize job` —— Agent 运行在 `PRDIRN01` 这台机器上，身份是 `PRDIRN01$`（Windows
+       计算机账号，不是某个人类用户账号）
+    2. `Download artifact` —— 从 ADO 下载 `azure-pipelines.yml` 打包出的 `pythonapp` Artifact，
+       到 VM 本地临时目录 `C:\azagent\A1\_work\r1\a\_DataEngineering\pythonapp\`
+    3. `PowerShell Script` —— 执行 `robocopy`，源 `...\pythonapp\QualtricsData\`，目标
+       `C:\Python\`（`/S /E /DCOPY:DA /COPY:DAT /R:2 /W:2`）——这就是 `copy.ps1` 原本的逻辑，
+       被 Trev 直接迁移进了这个 Release Pipeline 的步骤里，不再依赖仓库里的独立脚本文件
+    4. `Finalize Job` —— 收尾清理
+  - **已用真实一次部署（Release-3，2026-07-14 上午 9:31，触发于"Prune old JSON logs"这次
+    改动）验证成功**：robocopy 日志明确显示 `qualtrics_fetch.py` 被标记为 `Newer`，即真的
+    检测到版本较新并执行了覆盖复制——确认这次日志清理功能已经真实生效在 VM 的 `C:\Python\` 上，
+    不是停留在假设层面。同时在 `C:\Python\` 发现历史遗留文件：旧的 `copy.ps1`（已废弃但未被
+    清理，robocopy 标记为 Extra，不会被自动删除）、以及一批 `write_test_*.json` 历史日志。
 - **`qualtrics_fetch.py` 新增日志清理功能**：`_prune_old_log_files()`，每次 `write_log_file()`
   写完新日志后调用，只保留 `logs/` 文件夹里最新 5 份 JSON 日志（按文件名时间戳排序），避免
   长期无人值守运行后日志无限累积。已走 PR 流程（`prune-old-logs` 分支）合并进 `main`，ADO
@@ -415,11 +433,13 @@ baseline（2026-07-03，对应本轮全部核实完成后的状态）。
 - [x] ~~notebook 定时调度方案尚未落地~~ —— 已确定 VM + Windows Task Scheduler，VM 端写入 SQL Server
       已验证成功（`write_test.py`）
 - [x] ~~在 VM 上实际运行 `qualtrics_fetch.py`，验证 6 张表写入 `BRONZE.qua.*` 成功~~ —— Trev 已
-      部署，6 张表已在 `BRONZE.qua` 确认存在。**但仍需确认 VM 上跑的是否为最新版本代码**（见下方
-      ADO→VM 同步机制这一条，目前无法排除 VM 上是旧版本的可能性）
-- [ ] **（阻塞）** 向 Trev 确认：`copy.ps1` 被删除后，ADO Artifact 到 VM 的同步机制现在是什么——
-      `azure-pipelines.yml` 只做打包，没有部署步骤，需确认清楚每次 push 之后新代码多久/如何
-      同步到 VM，否则无法保证 VM 上运行的是最新版本（例如这次新增的日志清理功能是否已生效）
+      部署，6 张表已在 `BRONZE.qua` 确认存在
+- [x] ~~向 Trev 确认：ADO Artifact 到 VM 的同步机制现在是什么~~ —— **已通过实际触发一次部署并
+      逐层查看日志完整确认**：机制是 ADO Classic Release Pipeline "Deploy to PRDIRN01"（网页
+      配置，与 `azure-pipelines.yml` 独立），**需要手动点击 Deploy 触发**，内部用 robocopy 把
+      Artifact 复制到 VM 的 `C:\Python\`。详见上方"ADO→VM 同步机制已完整确认"一节。**后续
+      待办**：确认以后每次改完代码，是否都需要重复"手动点 Deploy"这一步，还是可以配置成
+      push 后自动触发（当前未配置自动触发，需要的话应找 Trev 讨论）
 - [ ] **（阻塞）** 向 Trev 确认 VM 系统时区（悉尼时间 or UTC），影响时间戳字段解读
 - [x] ~~编写 `NPS_Score` 的 SQL Server 端验证查询~~ —— `nps_score_validation_query.sql` 已完成，
       55 列/行数均已验证（见上方专门一节），**下一步：分享给同事核对，确认无误后包装成正式的
