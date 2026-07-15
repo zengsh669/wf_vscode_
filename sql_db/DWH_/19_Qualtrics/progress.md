@@ -1,6 +1,6 @@
 # Qualtrics 数据接入 — 进度记录
 
-最后更新：2026-07-14
+最后更新：2026-07-15
 
 ## 目标
 
@@ -274,6 +274,72 @@ Qlik 的 `CONCATENATE`，`LEN(LTRIM(RTRIM([Member Number])))>0` 对应 `Len(Trim
 明确的范围决定（见上方"已知的、明确排除的范围"一节），但此前没有把"55 列 vs 60 列"这个
 具体差距在文档里写清楚，容易让人误以为 55 列 = Qlik 完整输出，特此在此明确记录。
 
+## `usp_Load_NPS_Score`：NPS_Score 正式落地为 Silver 表 + 存储过程（2026-07-15）
+
+在 `nps_score_validation_query.sql` 验证通过的基础上，正式包装成两份文件并已在 SSMS 上依次
+执行、`EXEC` 过存储过程：
+
+- **`create_table_NPS_Score.sql`** —— 建 `SILVER.dbo.NPS_Score` 表，55 列，列顺序与验证查询
+  输出完全对应（列名规则化为下划线命名，如 `Customer Satisfaction Level` →
+  `Customer_Satisfaction_Level`）。多数列为 `NVARCHAR(MAX)`，`Start_Date`/`End_Date` 收窄为
+  `DATE`，`Duration`/`Location_Latitude`/`Location_Longitude` 收窄为 `FLOAT`（比 Bronze 原始
+  `NVARCHAR(MAX)` 更精确，已随 SP 实际跑通确认无类型转换问题）。
+- **`usp_Load_NPS_Score.sql`** —— `USE SILVER; GO` + `CREATE OR ALTER PROCEDURE dbo.usp_Load_NPS_Score`，
+  逻辑与 `nps_score_validation_query.sql` 完全对应（同样的 6 张 `BRONZE.qua.*` 表、同样的
+  `WHERE LEN(LTRIM(RTRIM([Member Number]))) > 0` 过滤、同样的 55 列 NULL 补位），额外包了
+  `TRUNCATE TABLE` + `INSERT INTO ... (显式列清单)`，符合仓库 `usp_Load_[Table_Name]` 命名
+  与 TRUNCATE+INSERT 全量刷新的标准模式。
+- **已在 SSMS 上验证跑通**：依次执行 `create_table_NPS_Score.sql` → `usp_Load_NPS_Score.sql`
+  → `EXEC dbo.usp_Load_NPS_Score`，成功完成，`SILVER.dbo.NPS_Score` 表已有数据。
+
+至此，"分享验证查询给同事核对 → 包装成正式 SP"这条待办已完整走完并落地生产表。
+
+## `run_nps_score_sp.py` + `run_qualtrics_pipeline.py`：调度脚本落地并部署（2026-07-15）
+
+`usp_Load_NPS_Score` 上线后，新增两份文件解决"抓取→聚合"的顺序依赖，让整条链路不再需要
+人工分别触发两步：
+
+- **`run_nps_score_sp.py`**（`DataEngineering/QualtricsData/`）—— 独立的最小化脚本，只做一件事：
+  连接 `SILVER`（连接字符串直接指向 `DATABASE=SILVER`，因为 SP 本身建在这个库下，避免跨库
+  执行权限的不确定性），执行 `EXEC dbo.usp_Load_NPS_Score`。成功打印一行确认，失败把
+  traceback 打到 stderr 并以非 0 退出码结束。**不写自己的 JSON 日志文件**——按用户决定，
+  它的执行结果只体现在调度脚本最后生成的总结日志里。
+- **`run_qualtrics_pipeline.py`**（同目录）—— 调度脚本，依次用 `subprocess.run()` 启动
+  `qualtrics_fetch.py` 和 `run_nps_score_sp.py`。两个步骤各自是独立进程（互不干扰，其中一个
+  崩溃不影响另一个的进程稳定性），调度脚本本身很薄，只负责按顺序启动 + 记录结果，类似
+  dbt/Airflow 里"编排层不含任务逻辑本身"的思路。**关键设计决定：不论第一步（抓取6份问卷）
+  成功与否，都会继续执行第二步（SP）**——因为 `qualtrics_fetch.py` 内部本来就是"单一问卷
+  失败不影响其余5份"的错误隔离设计，即使部分问卷失败，用 BRONZE 现有数据刷新 NPS_Score
+  也好过完全不刷新。执行完毕后生成一份总结 JSON 日志（`pipeline_run_YYYYMMDD_HHMMSS.json`），
+  记录两步各自的 exit_code/success/stdout/stderr，存放在与 `qualtrics_fetch_*.json` **同一个**
+  `logs/` 文件夹下，用不同的文件名前缀（`pipeline_run_` vs `qualtrics_fetch_`）区分，各自独立
+  只保留最新 5 份，互不影响对方的"保留数量"计数。
+- **调度方式的选型**：subprocess（独立进程）vs import+函数调用（同进程），选择前者，因为
+  更贴合"两个py互不干扰、可随时替换/独立观察"的诉求，且这个选择只影响调度脚本一个文件的
+  内部实现，之后如果想换成同进程调用、甚至换成 Airflow/dbt 之类的上层调度机制，成本很低——
+  两个被调度的脚本本身不需要跟着改。
+- **本机验证**：运行 `run_qualtrics_pipeline.py`，两步都因本机 ODBC Driver 17（脚本要求18，
+  与之前 `qualtrics_fetch.py` 单独测试时同样的环境限制）在连接 SQL Server 阶段失败
+  （`IM002 Data source name not found`）——但确认了调度逻辑本身完全正确：6份问卷抓取/
+  标准化本身成功（行列数与之前验证一致），"第一步失败仍执行第二步"的设计生效，总结日志
+  格式正确，`qualtrics_fetch.py` 自身日志与调度总结日志各自独立生成、互不干扰。
+- **部署到 VM（Release-4，2026-07-15 下午2:34）**：走 PR 流程（分支 `add-pipeline-orchestrator`，
+  commit `1a9398b`，PR #2504）合并进 `DataEngineering` 仓库 `main`，Build Pipeline 自动打包
+  （`20260715.1`），随后手动触发 Release Pipeline "Deploy to PRDIRN01" 生成 Release-4，四个
+  步骤全部成功，**逐层日志确认**：`Download artifact` 步骤明确显示两个新文件被下载
+  （`run_nps_score_sp.py`/`run_qualtrics_pipeline.py`），`PowerShell Script`（robocopy）步骤
+  明确显示两者均标记为 **`New File`** 并成功复制到 `C:\Python\`（`Files: 5 Total, 5 Copied,
+  0 FAILED`，Robocopy Exit Code 3 = 正常成功码）。**确认两个新文件已真实落地 VM 生产环境**，
+  不是停留在假设层面。
+- **`azure-pipelines.yml`/ADO Pipelines/Releases 均未改动**——三者的定义都用了不针对具体
+  文件名的通配写法（yml 的 `Contents: '**'`，robocopy 的 `/S /E`），新文件能被自动纳入打包
+  和部署范围，不需要修改任何流水线配置，只需要走一次标准的"push → 手动 Deploy"流程。
+
+**下一步（更新后的待办）**：这两个新脚本目前已经在 VM 上就位，但 **Windows Task Scheduler
+现有的调度任务大概率仍然直接指向 `qualtrics_fetch.py`**——需要 Trev 把 Task Scheduler 的
+调度目标改成 `run_qualtrics_pipeline.py`，"抓取→聚合"这条链路才会真正在定时任务里自动串联
+起来，否则这两个新脚本目前只是"部署了但没有被定时触发"的状态。
+
 ## 架构方向讨论：dbt / Airflow 评估结论（2026-07-14，暂不采用）
 
 结合本项目未来可能扩展（新增下游 SP、新增 Qualtrics 相关 Dashboard）的预期，评估过是否应
@@ -442,11 +508,18 @@ baseline（2026-07-03，对应本轮全部核实完成后的状态）。
       push 后自动触发（当前未配置自动触发，需要的话应找 Trev 讨论）
 - [ ] **（阻塞）** 向 Trev 确认 VM 系统时区（悉尼时间 or UTC），影响时间戳字段解读
 - [x] ~~编写 `NPS_Score` 的 SQL Server 端验证查询~~ —— `nps_score_validation_query.sql` 已完成，
-      55 列/行数均已验证（见上方专门一节），**下一步：分享给同事核对，确认无误后包装成正式的
-      `usp_Load_NPS_Score` 存储过程**（尚未开始）
-- [ ] 让 `qualtrics_fetch.py` 在 6 份问卷全部处理完后，自动调用 `usp_Load_NPS_Score`（一行
-      `cursor.execute("EXEC ...")`），解决"抓取→聚合"的顺序依赖，避免依赖 Task Scheduler 的
-      时间间隔猜测
+      55 列/行数均已验证（见上方专门一节）
+- [x] ~~把验证查询包装成正式的 `usp_Load_NPS_Score` 存储过程~~ —— `create_table_NPS_Score.sql`
+      + `usp_Load_NPS_Score.sql` 已写好，已在 SSMS 上依次执行并 `EXEC` 成功，`SILVER.dbo.NPS_Score`
+      表已有数据（详见上方"`usp_Load_NPS_Score`：NPS_Score 正式落地"一节）
+- [x] ~~让抓取和 SP 聚合的顺序依赖不再依赖 Task Scheduler 的时间间隔猜测~~ —— 未采用"在
+      `qualtrics_fetch.py` 内部直接加一行 `EXEC`"的方案，改为新增两份独立文件：
+      `run_nps_score_sp.py`（只负责 `EXEC usp_Load_NPS_Score`）+ `run_qualtrics_pipeline.py`
+      （调度脚本，subprocess 依次跑两步，不论第一步成败都跑第二步）。已 PR 合并 + 部署到
+      VM（Release-4），逐层日志确认两个新文件已落地 `C:\Python\`（详见上方专门一节）
+- [ ] 把 Windows Task Scheduler 现有任务的调度目标从 `qualtrics_fetch.py` 改为
+      `run_qualtrics_pipeline.py`——需要 Trev 操作，这一步做完之前，两个新脚本虽然已部署到
+      VM，但还不会被定时任务实际触发
 - [ ] （可选，超出当前目标范围）`DataforBI`/`DataforHCS_NPS_Calcs` 的复刻，需先补 Feedback 类字段
 - [ ] （长期）API Token 改用环境变量/Key Vault，避免明文——本仓库与 `DataEngineering` 仓库均维持
       「先跑通再处理」的决定
