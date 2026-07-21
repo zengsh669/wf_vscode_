@@ -48,6 +48,7 @@ BEGIN
                 WHEN claimType = 'Remedial Massage' THEN 'Remedial Massage'
                 WHEN claimType IN ('Acupuncture', 'Acupunture') THEN 'Acupuncture'
                 WHEN claimType = 'Chinese Herbalism' THEN 'Chinese Herbalism'
+                WHEN claimType = 'Chiropractic' THEN 'Chiro'
                 WHEN claimType = 'Physio' THEN 'Physio'
                 WHEN claimType = 'Dental' THEN 'Dental'
                 WHEN claimType = 'Other' THEN 'Other'
