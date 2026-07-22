@@ -226,3 +226,18 @@
 - SILVER · `--`  
 
 ---
+
+## Qaultrics NPS Score
+
+**Workspace:** UAT  
+**Size Bucket(MB):** 10  
+**Scheduled Refresh:** At 6:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
+***Notes:***
+- *DimDate till 30/06/2027*
+- *Measures by Power BI MCP*
+
+**Tables / Views:**
+- GOLD · `dbo.Qualtrics_NPS_Score`; `dbo.vw_Provider_Reference`
+- SILVER · `--`  
+
+---
