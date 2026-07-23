@@ -7,7 +7,7 @@
 
 ## SLIDE 1 — Title: Data Engineering — ~30 sec
 
-My role is split among three areas. Fifty percent is Data Engineering. It's the pipelines and the data warehouse behind every report.
+My role is divided into three areas. Fifty percent is Data Engineering. It's the pipelines and the data warehouse behind every report.
 
 Twenty percent is BI Development — building the actual Power BI reports, and moving us away from Qlik.
 
