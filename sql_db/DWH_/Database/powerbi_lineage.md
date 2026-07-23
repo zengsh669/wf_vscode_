@@ -63,7 +63,7 @@
 **Scheduled Refresh:** Manual upon request  
 ***Notes:***
 - *DimDate till 30/06/2027*
-- *CLustered bar rounded end*； Gantt custom visual； Drill-through feature； Rownumber calculated field
+- *CLustered bar rounded end； Gantt custom visual； Drill-through feature； Rownumber calculated field; Measures and cal cols*
 
 **Tables / Views:**
 - GOLD · `--`
