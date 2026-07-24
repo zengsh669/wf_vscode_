@@ -103,13 +103,27 @@ This is thirty percent of my time. These are tools I build outside the main pipe
 Four tools I want to highlight.
 
 **QVD Converter** — QVD is Qlik's own file format. This tool converts QVD files into CSV, Parquet, or JSON — normal formats anyone can use. And you don't even need a Qlik license to run it.
-*[Add a short example: when did this save time / what problem did it solve]*
+*QVD counld only be accessed via Qlik*
 
 **Snapshot Backup** — this pulls together our daily data snapshots into one clean Parquet format. It means we can go back and check what the data looked like on any specific day in the past.
-*[Add a short example]*
+*Right now, SQL Server keeps a full daily snapshot every single day. A lot of the older ones are never actually used, but nobody's cleaning them up, so they just sit there wasting storage space. On top of that, if someone wants to look back at historical data, the experience isn't great — it's clunky and hard to query.
+
+Parquet is ideal for this because it's a columnar format with very high compression — it shrinks the data down significantly compared to raw database tables. It's also much faster to query, since you only read the columns you actually need instead of scanning entire tables. And because it's an open format, it works outside of SQL Server too — Python, Power BI, pretty much any modern tool can read it directly, without tying up database resources or piling up hundreds of snapshot tables.*
 
 **ABS GEO Mapping** — this does location-based analysis, down to street level. It uses Australia's national address database, plus geographic boundary data from the ABS.
-*[Add a short example]*
+*The ABS uses a geographic classification system called the ASGS to divide Australia into statistical areas at different levels of granularity.
+
+For example, at the SA4 level you might have a region like "Central West." One level down, at SA3, that splits into towns like Bathurst, Lithgow, and Orange. If you drill into Bathurst specifically, the next level down — SA2 — breaks it down further into areas like Bathurst-East, Bathurst-South, and so on.
+
+Postcode boundaries may overlap with a few SAs (Statistical Areas).
+
+G-NAF is Australia's official national address database. It contains almost every address in the country, each one already matched to a precise coordinate. Think of it like an address-to-location dictionary — you give it a street address, and it tells you exactly where that is on the map.
+
+GeoPandas is a Python library built for working with geographic data.
+
+G-NAF converts addresses into coordinates, and then we use Python's GeoPandas library to match those coordinates to the corresponding SA.
+
+*
 
 **DWH Lineage Map** — this one automatically draws a diagram showing how data flows through our whole Bronze-Silver-Gold system. It shows exactly where each piece of data comes from, and where it goes.
 *[Add a short example]*
@@ -117,12 +131,3 @@ Four tools I want to highlight.
 ---
 
 ## Closing (no dedicated slide) — ~20–30 sec
-
-So to sum up — fifty percent of my work is the engineering underneath everything, twenty percent is the reports you actually see, and thirty percent is the tools that make our day-to-day work faster and smarter. Happy to take any questions.
-
----
-
-### Notes for practice
-- Total word count is written for roughly 12–13 minutes at a calm, clear pace.
-- Slide 9 has open space — fill it with real numbers or short stories (e.g. "this used to take 3 hours, now it takes 10 minutes") to naturally stretch it to fill your time budget.
-- Practice out loud once with a timer before the real thing — non-native pacing is often a bit slower, so this script leaves you buffer room under the 15-minute limit.
