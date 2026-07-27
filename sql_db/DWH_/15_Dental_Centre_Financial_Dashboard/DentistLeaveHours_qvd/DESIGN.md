@@ -14,12 +14,69 @@ into a SQL Server SILVER layer table. This script reads Payroll HR/payroll data 
 `Dental_Centre_Financial_Dashboard.md` script (feeds `Dental_Dentist_Utilisation`).
 
 **Source system:**
-- Payroll — Westfund's payroll/HR system (`Payroll.dbo.*` tables)
-- AccPac GL — via QVD (`AccPac_GL_Segments.qvd`, `AccPac_GL_Accounts.qvd`) for GL account structure
-- Excel — Award rate tables, PayRun Dates lookup (`Manual Data` library)
+- Payroll — Westfund's payroll/HR system (`Payroll.dbo.*` tables) — **the only source system
+  actually required, see "Scope Narrowing" below**
+- AccPac GL / Excel — used by the Qlik script's intermediate calculations, but **not required**
+  for this Silver table (see "Scope Narrowing")
 
 **Script produces exactly one QVD output**: `DentistLeaveHours.qvd` (single `Store` statement in
 the script — verified by scanning for all `Store ... into ... .qvd` statements).
+
+---
+
+## Scope Narrowing: Only Payroll SQL tables are required — no QVD, no Excel
+
+**Finding:** `DentistLeaveHours.qvd`'s own final output (the Qlik `DentistLeaveHours:` table,
+script lines 605–644) has only **11 columns**:
+
+```
+Payroll_KEY, Employee ID, Cost Centre, Hrs, Transaction Type, Leave Reason,
+SourceCalc, Default Cost Account Description, Payroll Run Date, Employee Code, Full Name
+```
+
+The main Dashboard (`Dental_Centre_Financial_Dashboard.md`, lines 1078–1096) consumes 10 of
+these 11 (all except `Employee ID`).
+
+**None of these 11 columns depend on AccPac GL (QVD) or Excel.** Tracing each column back to
+its Qlik source:
+
+| Column | Comes from | Depends on QVD/Excel? |
+|---|---|---|
+| `Payroll_KEY`, `Cost Centre`, `Hrs`, `Transaction Type`, `Leave Reason`, `Payroll Run Date` | `Transactions` (built from `_ipvEmployeeTrans` + 4 Payroll mapping tables) | No |
+| `SourceCalc` | Literal string (`'LeaveHrs'`/`'HrsPaid'`) | No |
+| `Employee ID`, `Employee Code`, `Full Name`, `Default Cost Account Description` | `Employee Details` (built from `_ipvRBMEmpDetails`) | No — these 4 fields don't need the AccPac GL Left Join at all |
+
+This means the AccPac GL QVD Left Join into `Employee Details` (Account Group, Company,
+Division, State, Branch, Product, Cover, Department — ~10 fields) and most of `Employee
+Details`'s other ~40 fields (address, Age, LOS Grp, Termination FinYear, etc.) were never
+part of `DentistLeaveHours.qvd`'s output in the first place — Qlik's own `DentistLeaveHours:`
+LOAD statement already narrows `Employee Details` down to just `Employee ID`, `Employee Code`,
+and `Full Name` before the final Store. Same for `Award Levels min rates.xlsx` (feeds the
+orphan `Awards` table, already excluded) and `PayRun Dates.xlsx` (feeds `Transaction Effective
+Date`, which isn't one of the 11 columns).
+
+**Practical effect:** the SQL rebuild only needs to replicate the sub-set of `Transactions` and
+`Employee Details` logic that produces these 11 columns. It does **not** need:
+- Any of the 4 AccPac GL QVD files (`AccPac_GL_Segments.qvd`, `AccPac_GLACCGRP.qvd`,
+  `AccPac_GL_Accounts.qvd`, `Paragon_security_level.qvd`)
+- Either Excel file (`Award Levels min rates.xlsx`, `PayRun Dates.xlsx`)
+- The AccPac-derived fields in `Employee Details` (Account Group/Company/Division/State/
+  Branch/Product/Cover/Department) or the ~40 other unused `Employee Details` fields (address,
+  Age, LOS Grp, Termination calculations, etc.)
+
+**This is reversible, not a permanent scope cut**: as long as BRONZE lands the full Payroll
+source tables (not pre-filtered), any of these omitted fields can be added to the Silver table
+later via `ALTER TABLE` + SP update if a future consumer needs them.
+
+**Note on framing vs. `DentalFinancialDetail_qvd`'s exclusions:** this is a different kind of
+exclusion from the ones made in the sibling `DentalFinancialDetail_qvd` project. There, excluded
+items (`MedicareRevenue`/`CostofGoods`, `AccountGrp_Map`, `Segment1/4/8/10_Map`) were genuine
+Qlik dead code or out-of-scope business lines — Qlik itself never used them either. Here, the
+AccPac GL fields and most `Employee Details` fields **were** part of Qlik's calculation
+pipeline for other tables, but were never selected into `DentistLeaveHours.qvd`'s own final
+output — so excluding them isn't "skipping dead Qlik code," it's "not rebuilding intermediate
+computations that Qlik itself discarded before this specific QVD's Store statement." The
+distinction matters for anyone reviewing this decision later.
 
 ---
 
@@ -48,19 +105,37 @@ Active, only fall back to Archive for Archive-only tables" produce an identical 
 
 ## Step 0: Source Table Discovery (confirmed)
 
-### SQL Tables — 9 tables (Payroll database only, Archive excluded, 2 dead/unused tables excluded)
+### QVD Files and Excel Files — NONE required
 
-| Table Name | Schema | Database | Role in Script |
-|---|---|---|---|
-| `_iptblAdditionsDeductions` | dbo | Payroll | `AdditionDeductions_Map` mapping source |
-| `_iptblCostAccounts` | dbo | Payroll | `CostCentre_Map` mapping source |
-| `_iptblGLBatchDetailsLedgerLink` | dbo | Payroll | `GL_MAP1` mapping source |
-| `_eivGLAccounts` | dbo | Payroll | `GL_MAP2` mapping source |
-| `_iptblSuperFund` | dbo | Payroll | `SuperFund_Map` mapping source |
-| `_ipvLeaveReasons` | dbo | Payroll | `LeaveReason_Map` mapping source |
-| `_eivPeriods` | dbo | Payroll | `Period_Map` mapping source |
-| `_ipvRBMEmpDetails` | dbo | Payroll | `Employee Details` main table |
-| `_ipvEmployeeTrans` | dbo | Payroll | `TransactionsTMP` main table |
+Per the "Scope Narrowing" finding above, none of the 11 output columns depend on any QVD file
+or Excel file. All 4 QVD files (`AccPac_GL_Segments.qvd`, `AccPac_GLACCGRP.qvd`,
+`AccPac_GL_Accounts.qvd`, `Paragon_security_level.qvd`) and both Excel files (`Award Levels
+min rates.xlsx`, `PayRun Dates.xlsx`) are out of scope for this rebuild.
+
+### SQL Tables — Payroll database only, Archive excluded, dead/unused tables excluded
+
+Base list of 9 tables (Archive branches + `_iptblTerminationReason`/`_iptblEmployee` already
+excluded — see reasons below). **Still open**: whether `_iptblGLBatchDetailsLedgerLink`,
+`_eivGLAccounts`, and `_iptblSuperFund` are needed — see note below the table.
+
+| Table Name | Schema | Database | Role in Script | Needed for the 11 output columns? |
+|---|---|---|---|---|
+| `_iptblAdditionsDeductions` | dbo | Payroll | `AdditionDeductions_Map` mapping source | Yes — feeds `Transaction Type` |
+| `_iptblCostAccounts` | dbo | Payroll | `CostCentre_Map` mapping source | Yes — feeds `Cost Centre` |
+| `_iptblGLBatchDetailsLedgerLink` | dbo | Payroll | `GL_MAP1` mapping source | **No** — only feeds `Employee Details.ACCTID`, which is not one of the 11 columns |
+| `_eivGLAccounts` | dbo | Payroll | `GL_MAP2` mapping source | **No** — same reason as `GL_MAP1` |
+| `_iptblSuperFund` | dbo | Payroll | `SuperFund_Map` mapping source | **No** — only feeds `Super Fund Name`, which is not one of the 11 columns |
+| `_ipvLeaveReasons` | dbo | Payroll | `LeaveReason_Map` mapping source | Yes — feeds `Leave Reason` |
+| `_eivPeriods` | dbo | Payroll | `Period_Map` mapping source | Yes — feeds `Payroll Run Date` |
+| `_ipvRBMEmpDetails` | dbo | Payroll | `Employee Details` main table | Yes — feeds `Employee ID`/`Employee Code`/`Full Name`/`Default Cost Account Description` (only these 4 of Employee Details' ~50 fields are needed) |
+| `_ipvEmployeeTrans` | dbo | Payroll | `TransactionsTMP` main table | Yes — feeds `Payroll_KEY`/`Cost Centre`/`Hrs`/`Transaction Type`/`Leave Reason`/`Payroll Run Date` |
+
+**Open decision (not yet confirmed by user):** `_iptblGLBatchDetailsLedgerLink`, `_eivGLAccounts`,
+and `_iptblSuperFund` can all be dropped from scope since none of their output fields
+(`ACCTID`, `Super Fund Name`) are among the 11 columns needed. If confirmed, the final table
+list narrows from 9 to **6 tables**:
+`_iptblAdditionsDeductions`, `_iptblCostAccounts`, `_ipvLeaveReasons`, `_eivPeriods`,
+`_ipvRBMEmpDetails`, `_ipvEmployeeTrans`.
 
 **Excluded from scope (confirmed):**
 
@@ -73,28 +148,8 @@ Active, only fall back to Archive for Archive-only tables" produce an identical 
 | `_ipvEmployeeTrans` (Payroll_Archive) | Archive branch excluded per Monique confirmation |
 | `_iptblTerminationReason` (`Termination_Map`) | Dead code — mapping table defined but never called via `ApplyMap()` anywhere in the script |
 | `_iptblEmployee` (`Awards` table) | Orphan table — computes `Award Minimum Hourly Rate` etc. but the `Awards` table itself is never joined into `Employee Details` or any downstream table; the surrounding `LIB CONNECT TO` pair is a Qlik connection-switching mechanism with no SQL equivalent needed |
-
-### QVD Files
-
-| File Name | Library | Used As |
-|---|---|---|
-| `AccPac_GL_Segments.qvd` | ExtractData | `Segment1_Map`–`Segment10_Map` (script actually uses Segment2/3/4/5/6/7/9 only) |
-| `AccPac_GLACCGRP.qvd` | ExtractData | `AccountGrp_Map` mapping |
-| `Paragon_security_level.qvd` | ExtractData | `SecurityMap` mapping — **dead code, never applied via `ApplyMap()`** |
-| `AccPac_GL_Accounts.qvd` | ExtractData | `Employee Details` AccPac Left Join (Account Group/Company/Division/State/Branch/Product/Cover/Department lookups) |
-
-### Other Files (Excel — no DB equivalent)
-
-| File Name | Library | Used As |
-|---|---|---|
-| `Award Levels min rates.xlsx` (Sheet5) | Manual Data | `SupportAward` mapping |
-| `Award Levels min rates.xlsx` (Sheet5) | Manual Data | `HealthProfessionalAward` mapping |
-| `PayRun Dates.xlsx` (Sheet1) | Manual Data | `TransactionsTMP` Pay Week Date lookup |
-
-**Note:** `SupportAward`/`HealthProfessionalAward` feed into `Awards` (the orphan table, excluded
-above) — so these two Excel mappings are also effectively out of scope, contingent on the
-`Awards` exclusion. `PayRun Dates.xlsx` remains in scope (used by `TransactionsTMP`, which feeds
-the final `DentistLeaveHours` output).
+| `AccPac_GL_Segments.qvd`, `AccPac_GLACCGRP.qvd`, `AccPac_GL_Accounts.qvd`, `Paragon_security_level.qvd` (all QVD) | None of the 11 output columns depend on AccPac GL data — see "Scope Narrowing" above |
+| `Award Levels min rates.xlsx`, `PayRun Dates.xlsx` (both Excel) | Feed fields (`Award Minimum Hourly Rate`, `Transaction Effective Date`) that are not among the 11 output columns — see "Scope Narrowing" above |
 
 ---
 
