@@ -12,7 +12,8 @@ BEGIN
         SELECT
             gk.membership_id,
             -- Qlik ApplyMap('AccountDetailsMap', membership_id, 'No Details') on account.account_type
-            ISNULL(dd.account_type, 'No Details') AS DirectDebitDetails,
+            -- COALESCE (not ISNULL) avoids ISNULL's truncate-to-first-argument-length quirk with char(1) source columns
+            COALESCE(dd.account_type, 'No Details') AS DirectDebitDetails,
             CASE WHEN gk.group_id IS NULL THEN 'No Group' ELSE CAST(gk.group_id AS VARCHAR(20)) END AS GroupId,
             gk.cover,
             CASE
