@@ -114,6 +114,7 @@ subquery.
 | `LOM` | Derived | Completed years since `join_date`, anniversary-adjusted (mirrors Qlik `age(rundate, join_date)`) |
 | `LOM_Bracket` | Derived | `CASE` on `LOM`: 0-3 / 3-5 / 5-10 / 10+ yrs |
 | `Date_Of_Birth` | `person.date_of_birth` | Via `person_membership` (relationship = primary) |
+| `Rundate` | `group_key_full_by_branch.rundate` (via `Characteristics` CTE) | The actual basis date used to compute `LOM`/`Age_Bracket`. Added after the fact — see Fixes below; consumers needing a raw member-age number (e.g. Power BI `MemberAge`) must compute it against `Rundate`, not `Year_Month` (they differ by ~1 month, see quirk below) |
 | `Age_Bracket` | Derived | `CASE` on age computed from `rundate` + `date_of_birth`, anniversary-adjusted (see Fixes below) |
 | `Latest_Receipt_Type` | Derived | `receipt_method_type.description` of the single latest receipt per member (`ROW_NUMBER()` on `create_datetime DESC`) |
 | `Direct_Debit_Break_Down` | Derived | `'Account'` if `expiry_date IS NULL` or expired, else `'Card'` |
@@ -142,6 +143,20 @@ semantics, found via independent sub-agent review and confirmed by data query be
    Quantified impact before fixing: 51,718 of 1,293,590 rows (3.998%) changed bracket.
 
 Both fixes were independently re-verified by a sub-agent review after applying.
+
+3. **`MemberAge` (Qlik `Section3` field) was never captured, unlike its `LOM` counterpart.**
+   Qlik's `Section3` outputs both a raw computed value and a bracket for membership length
+   (`LOM` + `LOM Bracket`) — but for age, only `Age Bracket` was captured in `Payment_Channel`;
+   `age(rundate, date_of_birth) as MemberAge` (Payment_Channel.md:102) was treated as a
+   throwaway intermediate value used only to derive `Age_Bracket`, rather than a field Qlik
+   itself outputs standalone. Found via Power BI data-model comparison against the live Qlik
+   app (Qlik's `Section3` box explicitly lists `MemberAge` as its own field). Resolved by
+   exposing `Rundate` as a new SILVER/GOLD column (see Key columns above) so `MemberAge` can be
+   computed downstream in Power BI as a calculated column, anniversary-adjusted the same way as
+   `LOM`/`Age_Bracket`, using `Rundate` (not `Year_Month`) as the basis date. `MemberAge` itself
+   is intentionally NOT added to the SQL layer — it's computed in Power BI on `Rundate` +
+   `Date_Of_Birth`. Verified manually against several rows post-fix, including a Dec/Jan
+   year-boundary case, all correct.
 
 ---
 
@@ -183,29 +198,39 @@ exist in the original Qlik script and are deliberately replicated rather than si
 
 ---
 
-## GOLD Views — Pending Decisions
+## GOLD Views
 
-Two views were discussed but not yet built. Three open questions were raised in conversation
-and never resolved before work moved to Request 3 — resolve these before generating the views:
+Two views split `Payment_Channel` back into the two original Qlik table shapes.
 
-1. **Naming.** Proposed: `vw_Payment_Channel_By_Month` (monthly detail, mirrors `Section3`) and
-   `vw_Payment_Channel_Latest` (one row per member, mirrors `LatestMembership`). Not yet
-   confirmed with the user.
+### `vw_Payment_Channel_By_Month`
 
-2. **"Latest" row selection for `vw_Payment_Channel_Latest`.** Proposed approach:
-   `ROW_NUMBER() OVER (PARTITION BY Membership_Id ORDER BY Year_Month DESC)`, filtered to
-   `rn = 1`. Not yet confirmed — in particular, ties (a member with two rows in the same
-   `Year_Month`, e.g. two different `Receipt_Method_Type` values in the same month) need a
-   deterministic tiebreaker, similar to the `Latest_Receipt_Type` tie handling already done in
-   the SILVER SP itself. Not yet checked whether `Payment_Channel`'s own grain
-   (`Membership_Id + Year_Month + Receipt_Method_Type`) can produce more than one row per
-   member per month — if so, `vw_Payment_Channel_Latest` needs its own tiebreak logic.
+Mirrors `Section3`. Projects all 14 non-snapshot columns of `Payment_Channel`
+(`Membership_Id`, `Year_Month`, `Receipt_Method_Type`, `Receipt_Method_Desc`,
+`Total_Receipt_Amount`, `Receipt_Count`, `Dishonour`, `Dishonour_Count`, `Branch_Description`,
+`Billing_Freq_Description`, `LOM`, `LOM_Bracket`, `Date_Of_Birth`, `Age_Bracket`) — excludes the
+4 `LatestMembership`-only snapshot columns, since Qlik's `Section3` never had them.
 
-3. **Field scope for `vw_Payment_Channel_By_Month`.** Undecided whether this view should
-   project all 18 columns of `Payment_Channel`, or exclude the snapshot-only columns that
-   logically belong to `LatestMembership` (`Latest_Receipt_Type`, `Direct_Debit_Break_Down`,
-   `Account_Number`, `Latest_Payment_Frequency`) to avoid presenting denormalised/repeated
-   values in a monthly-detail view.
+### `vw_Payment_Channel_Latest`
+
+Mirrors `LatestMembership`'s 5 output fields (`Membership_Id` + `Latest_Receipt_Type`,
+`Direct_Debit_Break_Down`, `Account_Number`, `Latest_Payment_Frequency`). Implemented as
+`SELECT DISTINCT` over `Payment_Channel`, **not** `ROW_NUMBER()` — verified against real SILVER
+data that these 4 snapshot columns hold exactly one distinct value per `Membership_Id` across
+every monthly row (0 members had more than 1 distinct value in any of the 4 columns), because
+they were already resolved once at SILVER-build time and repeated onto every month row for that
+member. No tiebreak logic needed.
+
+**Known population gap (quantified, accepted, not fixed):** Qlik's `LatestMembership` query has
+no date filter on its own base (any receipt, any date, for an active member with a
+non-excluded payment method). But `Payment_Channel`'s rows are only generated for members with
+a receipt `create_datetime >= '2025-01-01'` (inherited from `Section3`'s filter, since that's
+what drives which rows exist in the merged SILVER table at all). A member whose only qualifying
+receipt predates 2025-01-01 has zero rows in `Payment_Channel`, so their `Latest_Receipt_Type`
+etc. never got computed or attached — even though Qlik's real `LatestMembership` would show them.
+Quantified against BRONZE: **26 of 68,385 active members with qualifying receipts (0.038%)**
+fall into this gap. Accepted as negligible; not worth adding a second, date-unfiltered lookup
+path just for these 26 members. This is a side effect of the SILVER-layer merge decision (see
+Architecture decision above), not a bug in either GOLD view.
 
 ---
 
@@ -214,8 +239,8 @@ and never resolved before work moved to Request 3 — resolve these before gener
 ```
 create_table_Payment_Channel.sql
 usp_Load_Payment_Channel.sql
-create_view_vw_Payment_Channel_By_Month.sql   (pending)
-create_view_vw_Payment_Channel_Latest.sql     (pending)
+create_view_vw_Payment_Channel_By_Month.sql
+create_view_vw_Payment_Channel_Latest.sql
 ```
 
 ---

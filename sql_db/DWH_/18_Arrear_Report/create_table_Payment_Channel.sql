@@ -15,6 +15,7 @@ CREATE TABLE dbo.Payment_Channel (
     LOM                            INT             NULL,
     LOM_Bracket                    VARCHAR(10)     NULL,
     Date_Of_Birth                  DATE            NULL,
+    Rundate                        DATE            NULL,
     Age_Bracket                    VARCHAR(10)     NULL,
     Latest_Receipt_Type            VARCHAR(60)     NULL,
     Direct_Debit_Break_Down        VARCHAR(10)     NULL,

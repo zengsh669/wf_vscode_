@@ -137,6 +137,7 @@ BEGIN
         LOM,
         LOM_Bracket,
         Date_Of_Birth,
+        Rundate,
         Age_Bracket,
         Latest_Receipt_Type,
         Direct_Debit_Break_Down,
@@ -162,6 +163,7 @@ BEGIN
             WHEN ch.LOM > 10 THEN '10yrs+'
         END,
         ch.date_of_birth,
+        ch.rundate,
         -- Age computed against rundate (matches Qlik age(rundate, date_of_birth)), with anniversary adjustment consistent with the LOM calculation above.
         -- NOTE: mirrors Qlik source's age-bracket logic, which re-tests LOM (not age) in the later branches — preserved as-is per faithfulness to source, not corrected
         CASE
