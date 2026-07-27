@@ -20,10 +20,22 @@ SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;
 
 LIB CONNECT TO 'rpsqlrp01 - paragonreporting';
 
+AccountDetailsMap:
+Mapping
+LOAD "membership_id",
+    "account_type" 													as [Debit];
+SQL SELECT *
+FROM paragonreporting.dbo.account
+where (account_type ='D' and status_flag = 'A');
+
+
+LIB CONNECT TO 'rpsqlrp01 - paragonreporting';
+
 Payments:
 LOAD 
     membership_id & '|' & MonthStart(date(rundate-1)) as MbrMonthKey,
     membership_id,
+    ApplyMap('AccountDetailsMap',membership_id,'No Details') 				as [Direct Debit Details],
     If(IsNull(group_id),'No Group', group_id) as [Group ID],
     cover,
     If(WildMatch(cover,'*Athlete*'), 'Athlete',

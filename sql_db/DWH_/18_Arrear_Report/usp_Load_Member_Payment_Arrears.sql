@@ -11,6 +11,8 @@ BEGIN
     WITH PaymentsBase AS (
         SELECT
             gk.membership_id,
+            -- Qlik ApplyMap('AccountDetailsMap', membership_id, 'No Details') on account.account_type
+            ISNULL(dd.account_type, 'No Details') AS DirectDebitDetails,
             CASE WHEN gk.group_id IS NULL THEN 'No Group' ELSE CAST(gk.group_id AS VARCHAR(20)) END AS GroupId,
             gk.cover,
             CASE
@@ -94,6 +96,9 @@ BEGIN
             ON gk.group_id = bg.group_id
         LEFT OUTER JOIN BRONZE.dbo.billing_freq AS bf
             ON bg.billing_freq = bf.billing_freq
+        LEFT JOIN BRONZE.dbo.account AS dd
+            ON gk.membership_id = dd.membership_id
+            AND dd.account_type = 'D' AND dd.status_flag = 'A'
         WHERE gk.rundate > '2025-01-01'
     ),
     PaymentsPeriod AS (
@@ -183,6 +188,7 @@ BEGIN
     INSERT INTO SILVER.dbo.Member_Payment_Arrears (
         Mbr_Month_Key,
         Membership_Id,
+        Direct_Debit_Details,
         Group_Id,
         Cover,
         Cover_Category,
@@ -247,6 +253,7 @@ BEGIN
     SELECT
         CAST(p.membership_id AS VARCHAR(20)) + '|' + CONVERT(VARCHAR(10), p.ArrearsMonth, 120),
         p.membership_id,
+        p.DirectDebitDetails,
         p.GroupId,
         p.cover,
         p.CoverCategory,

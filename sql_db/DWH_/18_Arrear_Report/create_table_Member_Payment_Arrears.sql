@@ -4,6 +4,7 @@ GO
 CREATE TABLE dbo.Member_Payment_Arrears (
     Mbr_Month_Key                  VARCHAR(30)   NULL,
     Membership_Id                  DECIMAL(9,0)  NOT NULL,
+    Direct_Debit_Details           VARCHAR(11)   NULL,
     Group_Id                       VARCHAR(20)   NULL,
     Cover                          VARCHAR(500)  NULL,
     Cover_Category                 VARCHAR(20)   NULL,
