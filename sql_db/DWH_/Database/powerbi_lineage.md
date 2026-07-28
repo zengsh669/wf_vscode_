@@ -12,6 +12,7 @@
 - *dim_yr table to 2027*
 - *Homepage/Equation design*
 - *Movement page Logic*
+- *Membership_Product_Type deleted on 29/07, hid Indicators-Cover Type page*
 
 **Tables / Views:**
 - GOLD · `TBD`
