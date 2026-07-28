@@ -201,13 +201,15 @@
 ## Arrears Report
 
 **Workspace:** WIP  
-**Size Bucket(MB):** 5  
+**Size Bucket(MB):** 100  
 **Scheduled Refresh:** At 8:45 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
+- *Mergers with Payment Channels and Payment Methods-Advance and Arrears*
+- *vw_Member_Notes & Card_Merchant_Count & Pct_Arrears_Members_By_Paying_Type measures*
 
 **Tables / Views:**
-- GOLD · `--`
+- GOLD · `dbo.vw_Payment_Channel_Latest`; `dbo.vw_Payment_Channel_By_Month`; `dbo.vw_Member_Payment_Arrears`; `dbo.vw_Member_Comms_Detail`; `dbo.vw_Member_Notes`;
 - SILVER · `dbo.Arrears_Report`  
 
 ---
