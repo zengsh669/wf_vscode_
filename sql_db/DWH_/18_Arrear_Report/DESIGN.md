@@ -387,7 +387,7 @@ final `PaymentChange` left-join), `Payments3` (`consec_months`), `Dishonours`
 ### 2. `Member_Comms_Detail`
 
 **Source Qlik tables replaced:** `CommsDetail` (two-stage load — base contact info LEFT JOINed,
-then `join` (INNER JOIN) to latest `web_security` record), `Flags` (derived columns)
+then unqualified `join` to latest `web_security` record), `Flags` (derived columns)
 
 **Data sources:**
 
@@ -396,14 +396,16 @@ then `join` (INNER JOIN) to latest `web_security` record), `Flags` (derived colu
 | `memship` | Base membership | |
 | `PersonContact` | Contact details (name, email, mobile) | `relationship = '1'`, LEFT JOIN |
 | `memship_app` | `no_contact` flag | LEFT JOIN |
-| `web_security` | Postal preference, email, app-registered flag | `main_ref_type = 'P'`, latest `create_datetime` per person, INNER JOIN via `person_membership` |
+| `web_security` | Postal preference, email, app-registered flag | `main_ref_type = 'P'`, latest `create_datetime` per person, LEFT JOIN via `person_membership` |
 | `person_membership` | Links `web_security.main_ref_id` (person_id) to `membership_id` | `relationship = '1'` |
 
-**Important behaviour preserved from Qlik:** the second stage is an **INNER JOIN** (Qlik `join`,
-not `left join`) — members with no `web_security` record are dropped entirely from the final
-table. Verified against real data: this drops the table from 171,157 rows down to 76,165
-(55.5% of members have no web_security record and are excluded). This is faithful to the Qlik
-source, not a bug — flagging the magnitude for awareness.
+**Corrected behaviour (was a bug, now fixed — see Fixes below):** the second stage uses Qlik's
+unqualified `join` keyword, which — confirmed via [help.qlik.com](https://help.qlik.com/en-US/sense/May2025/Subsystems/Hub/Content/Sense_Hub/Scripting/ScriptPrefixes/Join.htm)
+— **defaults to an OUTER join, not an INNER join**, when no qualifier is given. The SP originally
+used `INNER JOIN`, which incorrectly dropped 94,982 of 171,178 rows (55.5% of members with no
+`web_security` record). Fixed to `LEFT JOIN` (verified equivalent to a full outer join here —
+`WebSecLatest` has zero rows with a `membership_id` absent from the base contact CTE). Row count
+now matches Qlik's live `CommsDetail`/`Flags` tables exactly: 171,178.
 
 **Key columns:**
 
@@ -489,6 +491,16 @@ per Principle 1, none were silently corrected without evidence and user approval
    date. Fixed to build from `p.ArrearsMonth` instead — the JOIN to `Dishonours` was already
    correct (used `ArrearsMonth`), only the emitted key string was wrong.
 
+6. **`CommsDetail` join type bug** (`Member_Comms_Detail`). The SP used `INNER JOIN` to attach
+   `web_security` data, on the assumption that Qlik's unqualified `join` keyword means INNER JOIN
+   (SQL convention). This assumption was **not verified before first use** and turned out to be
+   wrong: found when comparing row counts against a live Qlik Data Model Viewer screenshot
+   (`CommsDetail`/`Flags` both showing 171,178 rows, vs. our SP's 76,170). Confirmed via
+   [help.qlik.com](https://help.qlik.com/en-US/sense/May2025/Subsystems/Hub/Content/Sense_Hub/Scripting/ScriptPrefixes/Join.htm):
+   Qlik's unqualified `join` defaults to an **outer join**. Fixed to `LEFT JOIN` (verified
+   equivalent to full outer join here — see Silver Table 2 section above). Row count after fix:
+   171,178, exact match to Qlik.
+
 ---
 
 ## Known Quirks Preserved As-Is (faithful to Qlik source, not corrected)
@@ -541,10 +553,25 @@ the fact that the SILVER layer already made this same call.
 
 **Verified against real data:**
 - `vw_Member_Payment_Arrears`: 1,226,261 rows
-- `vw_Member_Comms_Detail`: 76,170 rows
+- `vw_Member_Comms_Detail`: 171,176 rows (see dedup note below)
 - `vw_Member_Notes`: 124,154 rows — `Sub_Sub_Ref_Description` NULL rate (39.35%, 48,859/124,154)
   confirmed to match the BRONZE source (`note.sub_sub_ref_type_id`) exactly under the same
   filters, i.e. not a JOIN defect — most notes simply have no sub-sub-category assigned.
+
+**`vw_Member_Comms_Detail` dedups `Membership_Id` in the view (not in SILVER).** Root cause:
+`BRONZE.PersonContact` can carry more than one `relationship = '1'` row per `membership_id` —
+found via 2 real cases (`Membership_Id` 133359, 100718), both a person whose surname changed
+(Breitkopf → Fittler) leaving both an old and a new contact record, both still flagged as the
+primary relationship. Qlik's own `CommsDetail`/`Flags` tables do not dedup this either (both
+show 171,178 rows, i.e. Qlik keeps both), so this is a genuine pre-existing data quality
+condition, not a translation bug — `SILVER.Member_Payment_Comms_Detail` and its SP were
+deliberately left unchanged (171,178 rows, faithful to Qlik) and the dedup was applied only in
+the GOLD view instead, per user's explicit choice. No `create_datetime`/modified-date column
+exists anywhere in `PersonContact` to determine which row is "newer" (checked — none of its
+columns are date-typed except `date_of_birth`), so the tiebreak uses `ROW_NUMBER() OVER
+(PARTITION BY Membership_Id ORDER BY CASE WHEN Detail_Email IS NOT NULL THEN 0 ELSE 1 END)`,
+preferring the row with a non-null `Detail_Email` (in both known cases, this happens to be the
+more complete/newer-looking record). Affects only these 2 members; 171,178 → 171,176 rows.
 
 ---
 

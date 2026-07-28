@@ -43,7 +43,9 @@ BEGIN
             AND pm.relationship = '1'
     ),
     CommsDetail AS (
-        -- Qlik `join (CommsDetail)` = INNER JOIN — members without a web_security record are dropped here
+        -- Qlik `join (CommsDetail)` (no qualifier) defaults to OUTER JOIN, not INNER —
+        -- confirmed via help.qlik.com. LEFT JOIN is equivalent here since WebSecLatest has
+        -- no membership_id absent from CommsBase (verified: 0 orphan rows).
         SELECT
             cb.membership_id,
             cb.first_name,
@@ -55,7 +57,7 @@ BEGIN
             wsl.email_address,
             wsl.App_Registered
         FROM CommsBase AS cb
-        INNER JOIN WebSecLatest AS wsl
+        LEFT JOIN WebSecLatest AS wsl
             ON cb.membership_id = wsl.membership_id
     )
     INSERT INTO SILVER.dbo.Member_Comms_Detail (
