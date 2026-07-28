@@ -10,7 +10,7 @@ and built separately. Do not assume cross-references between them unless explici
 |---|---|---|---|
 | 1 | Arrears Report | `arrear_report.md` | Pre-existing, not covered by this design doc |
 | 2 | Payment Channel | `Payment_Channel.md` | SILVER built; GOLD views pending |
-| 3 | Payment Methods - Advance and Arrears | `Payment_Methods_Advance_and_Arrears.md` | SILVER built; GOLD views pending |
+| 3 | Payment Methods - Advance and Arrears | `Payment_Methods_Advance_and_Arrears.md` | SILVER built; GOLD built |
 
 Request 1 (`usp_Load_ArrearsReport.sql` → `dbo.Arrears_Report`) predates this design doc and
 is out of scope here — see the file directly. It was confirmed NOT mergeable with either
@@ -298,32 +298,40 @@ Of the remaining 6 tables, grain analysis showed:
 - `Notes` has a different grain again (one-to-many, multiple notes per membership) and cannot
   be merged into either of the above — kept as its own table, `Member_Notes`.
 
+**GOLD-layer decision (see GOLD Views section below for full rationale):** rather than
+restoring all 6 Qlik table shapes 1:1, GOLD exposes **3 views**, one per SILVER table, each
+doing a plain `SELECT` of all columns. `Payments`/`Payments3`/`Dishonours` are **not** split
+back into 3 separate views — verified they share identical grain (`membership_id` + month), so
+splitting would only re-introduce the fragmentation the SILVER merge was meant to remove, with
+no grain conflict to justify it. This was an explicit, discussed deviation from a literal
+Qlik-shape restoration — approved by the user in favour of the simpler 3-view design.
+
 ---
 
 ## Architecture
 
 ```
-BRONZE (read-only)                          SILVER                          GOLD (pending)
+BRONZE (read-only)                          SILVER                          GOLD
 ──────────────────────────                  ──────────────────────────      ──────────────────────────
 group_key_full_by_branch      ──┐
 memship                         │
-billing_group                   ├──→        Member_Payment_Arrears   ──→    vw_Payments
-billing_freq                    │                                     ──→   vw_Payments3 (consec_months)
-receipt                         │                                     ──→   vw_Dishonours
+billing_group                   ├──→        Member_Payment_Arrears   ──→    vw_Member_Payment_Arrears
+billing_freq                    │
+receipt                         │
 receipt_method                  │
 receipt_method_type           ──┘
 
 memship                       ──┐
 PersonContact                   │
-memship_app                     ├──→        Member_Comms_Detail       ──→   vw_CommsDetail
-web_security                    │                                     ──→   vw_Flags (or merged into above)
+memship_app                     ├──→        Member_Comms_Detail       ──→   vw_Member_Comms_Detail
+web_security                    │
 person_membership              ──┘
 
 note                          ──┐
-sub_ref_type                    ├──→        Member_Notes              ──→   vw_Notes
+sub_ref_type                    ├──→        Member_Notes              ──→   vw_Member_Notes
 sub_sub_ref_type              ──┘
 
-(no BRONZE source — pure calendar)  ─────────────────────────────────────→  Power BI (DAX CALENDAR())
+(no BRONZE source — pure calendar)  ─────────────────────────────────────→  Power BI (dim_Date / DAX CALENDAR())
 ```
 
 ---
@@ -509,6 +517,34 @@ per Principle 1, none were silently corrected without evidence and user approval
 |---|---|
 | `SILVER.dbo.Master_Calendar` (or similar) | Trivial `Year`/`Month` derivation from `Payments.RUNDATE` — generated natively in Power BI (DAX `CALENDAR()`) instead, consistent with `WalletCard` handling in Request 2 |
 | Anything from `MemberAccount` block, or the 2nd/3rd `Payments` draft iterations | Dead code — appears after the first `EXIT SCRIPT;` in the `.md` file, confirmed never executed by the live Qlik app (see Overview) |
+| Separate `vw_Payments` / `vw_Payments3` / `vw_Dishonours` / `vw_Flags` views | Consolidated into fewer GOLD views instead of restoring all 6 Qlik table shapes 1:1 — see GOLD Views section below |
+
+---
+
+## GOLD Views
+
+Three views, one per SILVER table, each a plain `SELECT` of all columns (no filtering/reshaping).
+This consolidates the original 7 Qlik tables as follows:
+
+| GOLD View | Qlik Table(s) Covered | Why merged |
+|---|---|---|
+| `vw_Member_Payment_Arrears` | `Payments`, `Payments3`, `Dishonours` | All three share identical grain (`membership_id` + month) in the live Qlik model (confirmed via Data Model Viewer); `Payments3`/`Dishonours` were already merged into the same SILVER table (see Architecture decision above) — splitting them back into separate views would re-introduce fragmentation with no grain conflict to justify it |
+| `vw_Member_Comms_Detail` | `CommsDetail`, `Flags` | `Flags` is `Resident CommsDetail` in Qlik (Payment_Methods_Advance_and_Arrears.md:261-269) — a 1:1 derived-column table at the same grain, not an independent entity; its 4 output columns are already columns on `Member_Comms_Detail` |
+| `vw_Member_Notes` | `Notes` | Direct 1:1 mapping, different grain (one-to-many) from the other two views |
+| *(none — use `dim_Date`)* | `MasterCalendar` | Pure date dimension (`RUNDATE`/`Year`/`Month`), no BRONZE source of its own — reuse the existing Power BI `dim_Date` table instead of building a SQL object |
+
+This was raised as an explicit question (whether consolidating violates "faithfulness to Qlik
+logic") and decided deliberately: `Flags`/`CommsDetail` merge is a faithful 1:1 restoration (no
+information lost), while the `Payments`/`Payments3`/`Dishonours` merge is a disclosed,
+approved deviation from Qlik's literal table boundaries, justified by identical grain and by
+the fact that the SILVER layer already made this same call.
+
+**Verified against real data:**
+- `vw_Member_Payment_Arrears`: 1,226,261 rows
+- `vw_Member_Comms_Detail`: 76,170 rows
+- `vw_Member_Notes`: 124,154 rows — `Sub_Sub_Ref_Description` NULL rate (39.35%, 48,859/124,154)
+  confirmed to match the BRONZE source (`note.sub_sub_ref_type_id`) exactly under the same
+  filters, i.e. not a JOIN defect — most notes simply have no sub-sub-category assigned.
 
 ---
 
@@ -521,11 +557,9 @@ create_table_Member_Comms_Detail.sql
 usp_Load_Member_Comms_Detail.sql
 create_table_Member_Notes.sql
 usp_Load_Member_Notes.sql
-create_view_vw_Payments.sql            (pending)
-create_view_vw_Payments3.sql           (pending)
-create_view_vw_Dishonours.sql          (pending)
-create_view_vw_CommsDetail.sql         (pending)
-create_view_vw_Notes.sql               (pending)
+create_view_vw_Member_Payment_Arrears.sql
+create_view_vw_Member_Comms_Detail.sql
+create_view_vw_Member_Notes.sql
 ```
 
 ---
@@ -546,5 +580,5 @@ self-consistency checks (Consec_Months state-transition rules, PaymentChange sta
 rules, Dishonour_Type COUNT() sanity) — all returned 0 violating rows — plus a full execution
 test (1,226,261 rows, ~1 minute, no errors).
 
-GOLD views (once built) will read from the 3 SILVER tables above; each SP must complete before
-its dependent views are queried for fresh data.
+GOLD views read directly from the 3 SILVER tables above; each SP must complete before its
+dependent view is queried for fresh data.
