@@ -203,6 +203,72 @@ know which physical database/server the 9 source tables should be pulled from in
 
 ---
 
+## Parallel Track: Direct ConnX Exploration (alternative to resolving the BLOCKER above)
+
+**Rationale:** rather than wait on Monique's reply about whether `ConnX` corresponds to
+`Payroll`, a second approach was tried in parallel: search `ConnX` directly for tables/views
+that can supply the 11 needed columns by business meaning, independent of matching `Payroll.md`'s
+Qlik logic table-for-table. `ConnX` is confirmed to be an active, in-use HR/payroll system in
+its own right (product name "ConnX"), so it plausibly holds the same underlying business data
+(leave, hours, cost centres) even if the Qlik script's original `_iptbl*`/`_eiv*`/`_ipv*` table
+names don't exist there.
+
+### Confirmed usable sources in ConnX
+
+| Need | ConnX Table/View | Row Count | Notes |
+|---|---|---|---|
+| Employee ID / Employee Code / Full Name | `dbo.q2employees` | (not re-checked this session; confirmed usable via a reference query from another project) | `emp_code`; `Full Name` = `surname` + `given_name` |
+| Leave-side data (`SourceCalc='LeaveHrs'` in Qlik): Hrs, Leave Reason, Transaction Type, Payroll Run Date | `dbo.q2vEmployeeLeaveHistory` | 47,409 | Columns: `emp_code`, `hours`, `reason_desc` (already text), `type_desc`, `date_start`, `date_end`, `date_item_logged` — need to pick which date maps to `Payroll Run Date` |
+| Cost Centre dictionary | `dbo.q2cost_accounts` | — | `cost_account_id` → `description`, equivalent to Qlik's `_iptblCostAccounts`/`CostCentre_Map` |
+| Worked-hours-side data (`SourceCalc='HrsPaid'` in Qlik): the actual transaction table | `dbo.Q2AIR_Shift_Transaction` | 1,012,949 | Has `emp_id`, `start_local_dt`/`finish_local_dt`, `income_type_id`, `cost_account_code_id` — no direct hours or pay-period field, see open gaps below |
+| Transaction Type dictionary (HrsPaid side) | `dbo.Q2AIR_Income_Type` | 30 | `income_type_id` → `name`/`description` |
+
+### Ruled out (table/view exists but is empty — do not reuse these)
+
+`dbo.q2transactions`, `dbo.q2transaction_leave`, `dbo.q2vTimesheetHours`,
+`dbo.q2vTimesheetHoursTotal`, `dbo.Q2AIR_Global_Transaction`, `dbo.q2vRptFZ_SalaryTransactions`
+— all confirmed 0 rows. These look like superseded/legacy structures; the live system appears
+to run on the `Q2AIR_*` prefix (uppercase, underscore) rather than the lowercase `q2*` prefix.
+
+### Considered but rejected as unsuitable
+
+- `dbo.q2vRptEmpTotalHoursPerMonth` (74,015 rows) — only has `Total_hours` aggregated by
+  emp_code/year/month; no Transaction Type or Cost Centre breakdown, too coarse.
+- `dbo.q2vRptAIRPayrollTransactionsForExport` (19 rows) — field set is an almost perfect match
+  (`income_type_name`, `hour_value`, `cost_account`, `period_end_date`, `emp_name`, etc.) but
+  row count is far too low to be a stable historical source — looks like a transient "current
+  export batch" view built on top of `Q2AIR_Shift_Transaction`, not the underlying full table.
+
+### Open gaps (not yet resolved)
+
+1. **`Hrs` for the HrsPaid side** — `Q2AIR_Shift_Transaction` has no direct hours column found
+   yet; likely needs to be derived from `start_local_dt`/`finish_local_dt`, or there may be a
+   `units` field that already represents hours (not yet checked).
+2. **`Payroll Run Date` for the HrsPaid side** — `Q2AIR_Shift_Transaction` has no pay-period
+   field; a separate pay-period table needs to be identified and joined.
+3. **`Cost Centre` JOIN key for the HrsPaid side** — `Q2AIR_Shift_Transaction.cost_account_code_id`
+   vs `q2cost_accounts.cost_account_id` — naming suggests they're related but the join has not
+   been verified.
+4. **`Default Cost Account Description`** — `dbo.q2employee_cost_accounts` has `source_cost_account`
+   / `dest_account1` / `dest_account2` (with percent-split columns), but which field represents
+   the Qlik-equivalent "default" has not been confirmed; needs either data-based judgement (check
+   what % of employees have a 100% single-account split) or business confirmation.
+5. **`Payroll_KEY`** — depends on resolving #2 above (need a period/pay-run identifier to combine
+   with `emp_code`).
+
+**Estimate at time of writing:** using this ConnX-native path (rather than translating
+`Payroll.md`'s Qlik logic literally), roughly half of the 11 columns are fully resolved
+(`Employee ID`, `Employee Code`, `Full Name`, `SourceCalc`, and all 5 leave-side columns via
+`q2vEmployeeLeaveHistory`). The HrsPaid side (worked/paid hours, as opposed to leave) has its
+main table and Transaction Type dictionary identified, but `Hrs`, `Payroll Run Date`, and the
+`Cost Centre` join are still unresolved.
+
+**This track does not replace the BLOCKER above** — even if this path is pursued to
+completion, Monique's confirmation is still useful to validate the gaps identified here
+(especially #1, #2, and #4), so the Jira question remains open regardless of progress made here.
+
+---
+
 ## Not Yet Decided (pending later steps)
 
 - **Which physical database is `Payroll`** (see BLOCKER above) — must be resolved before Step 1
