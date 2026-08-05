@@ -47,7 +47,7 @@ SELECT
     s.units                                                           AS [Hrs],
     it.name                                                           AS [Transaction Type],
     NULL                                                              AS [Leave Reason],
-    it.name                                                           AS [Leave_Type_Standardised],
+    it.name                                                           AS [Leave Type Standardised],
     'HrsPaid'                                                         AS [SourceCalc],
     pos.Department                                                    AS [Default Cost Account Description],
     p_period.pe_date                                                  AS [Payroll Run Date],
@@ -69,6 +69,6 @@ LEFT JOIN ConnX.dbo.q2vHREmployee_Position pos
     AND p_period.pe_date BETWEEN pos.Date_Held_From AND ISNULL(pos.Date_Held_To, '9999-12-31')
 WHERE s.start_local_dt >= DATEADD(YEAR, -5, GETDATE())
   AND s.units > 0
-  AND pos.Role_Name IN ('Dentist', 'Dentist Casual', 'Dentist Clinical Lead', 'Associate Clinical Dentist Lead')
+--   AND pos.Role_Name IN ('Dentist', 'Dentist Casual', 'Dentist Clinical Lead', 'Associate Clinical Dentist Lead')
 
 ORDER BY [Full Name], [Payroll Run Date] DESC;
