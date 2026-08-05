@@ -239,33 +239,166 @@ to run on the `Q2AIR_*` prefix (uppercase, underscore) rather than the lowercase
   row count is far too low to be a stable historical source — looks like a transient "current
   export batch" view built on top of `Q2AIR_Shift_Transaction`, not the underlying full table.
 
-### Open gaps (not yet resolved)
+### All 5 gaps resolved — 11/11 columns now have a confirmed ConnX source
 
-1. **`Hrs` for the HrsPaid side** — `Q2AIR_Shift_Transaction` has no direct hours column found
-   yet; likely needs to be derived from `start_local_dt`/`finish_local_dt`, or there may be a
-   `units` field that already represents hours (not yet checked).
-2. **`Payroll Run Date` for the HrsPaid side** — `Q2AIR_Shift_Transaction` has no pay-period
-   field; a separate pay-period table needs to be identified and joined.
-3. **`Cost Centre` JOIN key for the HrsPaid side** — `Q2AIR_Shift_Transaction.cost_account_code_id`
-   vs `q2cost_accounts.cost_account_id` — naming suggests they're related but the join has not
-   been verified.
-4. **`Default Cost Account Description`** — `dbo.q2employee_cost_accounts` has `source_cost_account`
-   / `dest_account1` / `dest_account2` (with percent-split columns), but which field represents
-   the Qlik-equivalent "default" has not been confirmed; needs either data-based judgement (check
-   what % of employees have a 100% single-account split) or business confirmation.
-5. **`Payroll_KEY`** — depends on resolving #2 above (need a period/pay-run identifier to combine
-   with `emp_code`).
+1. **`Hrs` for the HrsPaid side — RESOLVED.** `Q2AIR_Shift_Transaction.units` is the hours
+   value — verified against a 20-row sample by comparing `units` to the `finish_local_dt` -
+   `start_local_dt` time difference; they match exactly (e.g. 18:00→19:00 = 1.0 hour = 1
+   unit; 13:30→18:00 = 4.5 hours = 4.5 units). Some rows have `units = 0` despite a non-zero
+   time span (also `total_cost = 0`) — likely cancelled/incomplete shifts; may need filtering
+   when the SP is built.
+2. **`Payroll Run Date` for the HrsPaid side — RESOLVED.** `dbo.q2period_end_dates.pe_date`
+   is the equivalent. Confirmed by re-reading the Qlik source: `Period_Map` builds
+   `Payroll Run Date` from `Date(Left("Period End",10))` — the source field is literally named
+   "Period End", i.e. the period **end** date, not the pay date. `q2period_end_dates` has both
+   `pe_date` (period end) and `pay_date` (actual pay date, usually next day) — `pe_date` is the
+   correct match. Table is weekly cadence (`pay_frequency = 'Weekly'`), 394 rows. `Q2AIR_Shift_Transaction`
+   has no period field itself, so joining requires matching `start_local_dt` into a `pe_date`
+   window (period = 6 days before `pe_date` through `pe_date` inclusive, for weekly periods).
+   Note: `q2period_end_dates` also has a `co_id` column (company ID) — may need to be included
+   in the join if ConnX manages multiple companies/payroll groups; not yet confirmed necessary.
+3. **`Cost Centre` JOIN key for the HrsPaid side — RESOLVED.** `Q2AIR_Shift_Transaction.cost_account_code_id`
+   joins directly to `q2cost_accounts.cost_account_id` — verified with a 10-row sample, all
+   rows matched successfully (sample showed `cost_account_id = 28` → description
+   `"Lithgow Dental"` for every row).
+4. **`Default Cost Account Description` — RESOLVED, source table changed.** The originally
+   suspected table (`dbo.q2employee_cost_accounts`) turned out to be **empty** (0 rows), as
+   was a second candidate (`dbo.Q2AIR_Employee_Rule_Set_Group_Cost_Account`, also 0 rows).
+   Inferring from `Q2AIR_Shift_Transaction` by "most frequent `cost_account_code_id` per
+   employee" was tested and rejected — for a sample employee (`emp_id = 444`), the most common
+   value was `NULL` (302 occurrences) ahead of any real cost account (`15`: 211,
+   `57`: 19) — too dirty to use as a default. The correct source instead is
+   **`dbo.q2vHREmployee_Position.Department`** (the same table already used in the reference
+   query from the other project, filtered `WHERE Date_Held_To IS NULL` for the employee's
+   current position). This column holds department names, and its distinct values include
+   `Lithgow Dentists` — see the note below on the exact string match question.
+5. **`Payroll_KEY` — RESOLVED (pure calculated field, no new table needed).** Once #2 was
+   resolved, this is simply `Employee ID` + a period identifier concatenated (e.g.
+   `emp_code + '|' + CAST(period_end_date_id AS VARCHAR)`), mirroring Qlik's
+   `iEmployeeID&'|'&iPeriodID`. No additional data source required.
 
-**Estimate at time of writing:** using this ConnX-native path (rather than translating
-`Payroll.md`'s Qlik logic literally), roughly half of the 11 columns are fully resolved
-(`Employee ID`, `Employee Code`, `Full Name`, `SourceCalc`, and all 5 leave-side columns via
-`q2vEmployeeLeaveHistory`). The HrsPaid side (worked/paid hours, as opposed to leave) has its
-main table and Transaction Type dictionary identified, but `Hrs`, `Payroll Run Date`, and the
-`Cost Centre` join are still unresolved.
+### Open question: how to identify "dentists" in ConnX — Department vs Role_Name
 
-**This track does not replace the BLOCKER above** — even if this path is pursued to
-completion, Monique's confirmation is still useful to validate the gaps identified here
-(especially #1, #2, and #4), so the Jira question remains open regardless of progress made here.
+Re-reading the Qlik source confirms the exact filter used to build `DentistLeaveHours` (line 632):
+```
+Where [Default Cost Account Description] = 'Employee Dentists';
+```
+This is an **exact match**, not a wildcard (a separate, unrelated `wildmatch("...", 'Employee
+Dentists', 'Lithgow Dental')` exists elsewhere in the script for FTE calculations, but that is
+not part of the `DentistLeaveHours` output path and should not be used as a reference here).
+
+**First candidate tried: `q2vHREmployee_Position.Department = 'Lithgow Dentists'`.**
+`Department`'s distinct value list does not contain the literal string `'Employee Dentists'`,
+but does contain `'Lithgow Dentists'` — plausible as the same role under ConnX's newer
+"Location + Role" department naming convention. Cross-check: `COUNT(DISTINCT emp_code) WHERE
+Department = 'Lithgow Dentists' AND Date_Held_To IS NULL` = **3 employees**.
+
+**Second, stronger candidate: `q2vHREmployee_Position.Role_Name`.** The same table has a
+`Role_Name` column (already used in the reference query from another project) with a direct
+job-title granularity. Searching `Role_Name LIKE '%Dentist%'` found 4 distinct values:
+`Dentist`, `Dentist Casual`, `Dentist Clinical Lead`, `Associate Clinical Dentist Lead`.
+Cross-check: `COUNT(DISTINCT emp_code) WHERE Role_Name IN (...) AND Date_Held_To IS NULL` =
+**5 employees** (`Dentist`: 3, `Dentist Clinical Lead`: 1, `Associate Clinical Dentist Lead`: 1,
+`Dentist Casual`: 0 currently).
+
+**`Role_Name` is the preferred candidate over `Department`:**
+- It's a direct job-title match rather than an inferred department-to-role mapping that relies
+  on the "Westfund dental is Lithgow-only" assumption holding true indefinitely
+- The 5-person breakdown (3 base + 1 lead + 1 associate lead) reads as a more plausible team
+  structure than a flat count of 3
+- It doesn't silently misclassify dental-adjacent admin/coordinator roles (`Lithgow Dental
+  Administration`, `Lithgow Dental Coordinator Quality/Training` are separate departments,
+  correctly excluded either way, but `Role_Name` makes this exclusion explicit rather than
+  incidental)
+
+**Working assumption (not yet business-confirmed): filter on
+`Role_Name IN ('Dentist', 'Dentist Casual', 'Dentist Clinical Lead', 'Associate Clinical Dentist Lead')`.**
+This is better-supported than the `Department` guess but is still not a verified 1:1 mapping to
+the old Payroll system's `'Employee Dentists'` value — in particular, whether `Dentist Casual`
+should be included is a judgement call, not a certainty. Flagging for Monique to confirm
+alongside the existing BLOCKER question, since it can't be fully settled by SQL alone.
+
+### `EmployeeStatus` active/terminated logic — RESOLVED, not needed
+
+`EmployeeStatus` (`Payroll.md` lines 574–598) computes a full Active/Terminated determination
+per employee per pay run: it builds `[Termination Date]` (via `TermDate_Map`) and `[Last Payroll
+Run]` (whether this is the employee's most recent pay run, via `LastRunDate_Map`), then derives
+`[Employee Status]` = `'Terminated'` only when `[Termination Date]-1 <= [Payroll Run Date] AND
+[Last Payroll Run]` — i.e. only on an employee's final pay run once their termination date has
+passed, not simply "has a termination date".
+
+**But `DentistLeaveHours`'s Left Join into `EmployeeStatus` (line 630–638) only pulls 4 fields:
+`Payroll_KEY`, `Employee ID`, `Default Cost Account Description`, `Payroll Run Date`.** The
+`[Employee Status]`/`[Active Flag]`/`[Terminated Flag]` fields — the actual output of all this
+logic — are never selected. `EmployeeStatus` is used purely as a join vehicle to fetch
+`Default Cost Account Description`, which the ConnX rebuild already sources directly from
+`q2vHREmployee_Position` (see above) without needing this intermediate table at all.
+
+**Conclusion: this entire Active/Terminated calculation does not need to be replicated.** It's
+the same pattern as the AccPac GL fields excluded in "Scope Narrowing" above — Qlik computed it,
+but it was never selected into this specific QVD's final output.
+
+**Summary: all 11 columns now have an identified ConnX source, and all three follow-up
+questions raised in this exploration are now resolved or explicitly deferred to business
+confirmation:**
+- (a) **Deferred to Monique**: which `Role_Name`/`Department` value(s) correctly represent
+  `'Employee Dentists'` (see above)
+- (b) **Still open, not yet checked**: verifying the Transaction Type filter lists (Qlik's
+  `wildmatch` lists of Leave/HrsPaid transaction type names) actually match the text values
+  found in `q2vEmployeeLeaveHistory.type_desc` / `Q2AIR_Income_Type.name`/`description`
+- (c) **Resolved, see immediately above**: `EmployeeStatus`'s Active/Terminated logic is
+  confirmed unnecessary — it was never part of `DentistLeaveHours.qvd`'s actual output
+
+**This track does not replace the BLOCKER above** — Monique's confirmation is still useful to
+validate the `'Lithgow Dentists'` assumption and cross-check the ConnX findings against the
+original Payroll system, so the Jira question remains open regardless of progress made here.
+
+### Split-delivery decision: LeaveHrs branch validated, HrsPaid branch is not
+
+Cross-checking both branches against real employees' own records produced different outcomes:
+
+- **LeaveHrs branch — VALIDATED.** Checked against two employees' actual leave history; both
+  matched. See [validation_LeaveHrs.sql](validation_LeaveHrs.sql).
+- **HrsPaid branch — NOT YET ACCURATE.** Checked against one employee's actual worked hours;
+  the query returned rows the employee confirmed were never worked. See
+  [validation_HrsPaid.sql](validation_HrsPaid.sql) for the full list of known issues.
+
+**Decision: share the LeaveHrs branch with Monique now as a partial result, rather than waiting
+for HrsPaid to be fixed.** Rationale: LeaveHrs is independently validated and can start business
+review (Role_Name dentist filter, Cost Centre NULLs) without being blocked by HrsPaid's issues.
+When sharing, must be explicit that this is the leave-records half only, not the complete
+`DentistLeaveHours.qvd` (which is LeaveHrs + HrsPaid combined per Qlik's `Concatenate`).
+
+**Root cause investigation for HrsPaid, this session:**
+- Confirmed `units = 0` rows in `Q2AIR_Shift_Transaction` are systematic future-shift
+  placeholders (rostered but not yet occurred), not deleted/cancelled records — sample rows
+  had `is_deleted='N'`, `is_reversal='N'`, `is_current='Y'`, real start/finish timestamps,
+  real employee and cost centre. Filter `AND s.units > 0` added to remove these.
+- Even with that filter, one employee's records still included ~100 rows of suspiciously
+  regular "Normal No Exp" / "BRK30 MIN Unpaid" shifts (exactly 4 per working day, every
+  working day in a date range) that the employee confirmed are not real worked hours — this
+  looks like a rostering template, not actual paid transactions.
+- Working hypothesis (unverified): `Q2AIR_Shift_Transaction` may be ConnX's **rostering**
+  table, not the equivalent of Qlik's `_ipvEmployeeTrans` (an actual **payroll transaction**
+  table — hours already processed and paid). If true, no amount of additional `WHERE`
+  filtering fixes this; a different ConnX table representing processed pay transactions would
+  be needed instead. Not yet confirmed with Monique/IT.
+- Also confirmed (separately, not blocking): `Cost Centre` is NULL for ~93% of HrsPaid rows
+  because `cost_account_code_id` itself is NULL on the source row for that share of records
+  (verified 405,897 of 437,346 rows) — not a JOIN failure. Genuine source data gap.
+
+**Also resolved this session — `Default Cost Account Description`/`Cost Centre` NULL reduction
+via range-matched position history:** the original `pos.Date_Held_To IS NULL` ("current
+position only") join was replaced with a range match —
+`p_period.pe_date BETWEEN pos.Date_Held_From AND ISNULL(pos.Date_Held_To, '9999-12-31')` —
+so each row gets the position that was actually held **at the time of that payroll run**,
+not the employee's present-day position. Verified this matters: `q2vHREmployee_Position` does
+hold genuine multi-row position history for many employees (some with up to 6 records). On the
+LeaveHrs branch, this reduced NULLs on `Default Cost Account Description`/`Cost Centre` from
+4,411 to 545 out of 22,842 rows. Note this is a deliberate departure from Qlik's own logic
+(Qlik takes a plain `Distinct` current value from `Employee Details`, no date-range matching) —
+justified because it measurably closes a real NULL gap and ConnX's data model supports it,
+where Qlik's source table apparently didn't need it.
 
 ---
 
@@ -288,6 +421,12 @@ completion, Monique's confirmation is still useful to validate the gaps identifi
 sql_db/DWH_/15_Dental_Centre_Financial_Dashboard/DentistLeaveHours_qvd/
 ├── DESIGN.md                          ← this file
 ├── Payroll.md                         ← Qlik source script (already committed)
+├── validation_LeaveHrs.sql            ← ad-hoc validation query, LeaveHrs branch (validated)
+├── validation_HrsPaid.sql             ← ad-hoc validation query, HrsPaid branch (not yet accurate)
 ├── create_table_Dentist_Leave_Hours.sql   (name TBD at Step 3)
 └── usp_Load_Dentist_Leave_Hours.sql       (name TBD at Step 3)
 ```
+
+Note: `validation_*.sql` are exploratory ConnX validation queries, not the final BRONZE/SILVER
+build artifacts — those (`create_table_*.sql` / `usp_Load_*.sql`) still require Step 1 (BRONZE
+mapping) to be unblocked first, per the BLOCKER above.
