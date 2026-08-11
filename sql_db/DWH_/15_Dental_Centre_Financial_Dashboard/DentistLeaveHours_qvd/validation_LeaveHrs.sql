@@ -15,6 +15,12 @@
 -- Candidate filter, for reference: pos.Role_Name IN ('Dentist', 'Dentist Casual',
 -- 'Dentist Clinical Lead', 'Associate Clinical Dentist Lead') — see DESIGN.md "Open question:
 -- how to identify 'dentists' in ConnX" for full reasoning.
+--
+-- Job_Classification: added at Monique's request (Jira, this project's ticket) to help
+-- identify Optometrists for the Eyecare Utilisation calc. Chain:
+-- q2vHREmployee_Position.Chart_ID -> q2HRPositional_Chart.Job_Classification_ID
+-- -> q2esp_job_classification.Job_Classification. This may also turn out to be a more
+-- precise dentist-identification field than Role_Name/Department above — not yet assessed.
 
 SELECT
     h.emp_code + '|' + CONVERT(VARCHAR(10), p_period.pe_date, 112)   AS [Payroll_KEY],
@@ -28,7 +34,8 @@ SELECT
     pos.Department                                                    AS [Default Cost Account Description],
     p_period.pe_date                                                  AS [Payroll Run Date],
     e.emp_code                                                        AS [Employee Code],
-    e.surname + ', ' + e.given_name                                   AS [Full Name]
+    e.surname + ', ' + e.given_name                                   AS [Full Name],
+    jc.Job_Classification                                             AS [Job Classification]
 FROM ConnX.dbo.q2vEmployeeLeaveHistory h
 LEFT JOIN ConnX.dbo.q2employees e
     ON h.emp_code = e.emp_code
@@ -37,6 +44,10 @@ LEFT JOIN ConnX.dbo.q2period_end_dates p_period
 LEFT JOIN ConnX.dbo.q2vHREmployee_Position pos
     ON h.emp_code = pos.emp_code
     AND p_period.pe_date BETWEEN pos.Date_Held_From AND ISNULL(pos.Date_Held_To, '9999-12-31')
+LEFT JOIN ConnX.dbo.q2HRPositional_Chart pc
+    ON pos.Chart_ID = pc.Chart_ID
+LEFT JOIN ConnX.dbo.q2esp_job_classification jc
+    ON pc.Job_Classification_ID = jc.Job_Classification_ID
 WHERE h.date_start >= DATEADD(YEAR, -5, GETDATE())
 --   AND pos.Role_Name IN ('Dentist', 'Dentist Casual', 'Dentist Clinical Lead', 'Associate Clinical Dentist Lead')
 

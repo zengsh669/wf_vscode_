@@ -400,6 +400,61 @@ LeaveHrs branch, this reduced NULLs on `Default Cost Account Description`/`Cost 
 justified because it measurably closes a real NULL gap and ConnX's data model supports it,
 where Qlik's source table apparently didn't need it.
 
+### LeaveHrs branch submitted to Monique/Aaron/Mario for business review (Jira)
+
+The `validation_LeaveHrs.sql` query (unfiltered — no dentist filter applied, `BRONZE.cnx.*`
+table references) was posted to Jira as an internal note to Monique Rust, Aaron Staines, and
+Mario Fortunato, asking them to validate the script and its output. Reported as tested against
+the author's own leave records and found accurate.
+
+**Two ConnX tables landed into BRONZE this session** (`BRONZE.cnx` schema), via new ADF pipeline
+JSON configs added to `sql_db/ADF_parametres/`:
+- `tbl_ConnX_q2HRPositional_Chart.json` — `q2HRPositional_Chart` (position/org-chart table;
+  `Chart_ID` joins to `q2vHREmployee_Position.Chart_ID`, carries `Job_Classification_ID`)
+- `tbl_ConnX_q2esp_job_classification.json` — `q2esp_job_classification` (job classification
+  dictionary; `Job_Classification_ID` → `Job_Classification` text, e.g. `DENTIST`,
+  `OPTOMETRIST`, `DENTAL ASSISTANT`)
+
+Both confirmed present and populated in `BRONZE.cnx` (checked via `INFORMATION_SCHEMA.COLUMNS`
+and row counts) before being used in the query sent to Monique. `q2vEmployeeLeaveHistory`,
+`q2employees`, `q2period_end_dates`, `q2vHREmployee_Position` were already landed in
+`BRONZE.cnx` prior to this — the query sent to Monique reads entirely from BRONZE, not the
+ODS ConnX database directly.
+
+### `Job_Classification` column added (Monique's request, for Eyecare Utilisation)
+
+Monique replied on Jira asking to add the job classification field, to help identify
+Optometrists for a separate **Eyecare Utilisation** calc (a different project, reusing this
+same ConnX exploration). Added to `validation_LeaveHrs.sql` via a two-step join chain:
+
+```
+q2vHREmployee_Position.Chart_ID
+  -> q2HRPositional_Chart.Chart_ID       (get Job_Classification_ID)
+    -> q2esp_job_classification.Job_Classification_ID   (get Job_Classification text)
+```
+
+`q2esp_job_classification` was browsed directly and confirmed to contain both `DENTIST` (ID 16,
+plus `SENIOR DENTIST`, `DENTIST CLINICAL LEAD`, `DENTIST CASUAL`, `Associate Clinical Dentist
+Lead`/`Associate Clinical Dental Lead`) and `OPTOMETRIST` (ID 11, plus `SENIOR OPTOMETRIST`,
+`GRADUATE OPTOMETRIST`, `OPTOMETRIST LEAD`) as distinct values — this is a more granular,
+purpose-built classification dictionary than `Role_Name`/`Department`, and **may turn out to be
+a better dentist-identification field than the `Role_Name` candidate above** (not yet assessed —
+flagging as a new open question).
+
+**Behaviour note (same mechanism as the Cost Centre/Department NULLs above):**
+`Job_Classification` is matched via the same `p_period.pe_date BETWEEN
+pos.Date_Held_From/Date_Held_To` range join used for Department, so it reflects the
+classification of the position **held at the time of that payroll run**, not a fixed
+per-employee value. Observed in practice: a single employee can show `NULL` on earlier rows and
+a real classification (e.g. `Business Operations Specialist`) on later rows, consistent with a
+position/classification change partway through their history. This was called out to Monique
+when the updated query was sent, to avoid it being mistaken for a data bug.
+
+**New open question, not yet assessed:** does `Job_Classification` (e.g. `DENTIST` vs
+`Role_Name IN ('Dentist', ...)`) produce a cleaner or different dentist headcount than the
+`Role_Name` candidate already discussed above? Worth a cross-check once there's a reason to
+revisit the dentist filter decision.
+
 ---
 
 ## Not Yet Decided (pending later steps)
