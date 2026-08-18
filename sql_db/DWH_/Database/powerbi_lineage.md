@@ -217,7 +217,7 @@
 
 ## Agreement Renewals
 
-**Workspace:** Developer_Workings  
+**Workspace:** Operations  
 **Size Bucket(MB):** 5  
 **Scheduled Refresh:** At 8:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
