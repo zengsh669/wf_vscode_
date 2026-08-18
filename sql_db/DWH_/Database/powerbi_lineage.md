@@ -201,7 +201,7 @@
 
 ## Arrears Report
 
-**Workspace:** WIP  
+**Workspace:** Operations  
 **Size Bucket(MB):** 100  
 **Scheduled Refresh:** At 8:45 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
