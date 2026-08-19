@@ -18,6 +18,7 @@ DECLARE @PreSnapshotDate DATE;
 DECLARE @TodayTable      SYSNAME;
 DECLARE @YdayTable       SYSNAME;
 DECLARE @SQL             NVARCHAR(MAX);
+DECLARE @ProductFilter   NVARCHAR(MAX);
 
 DROP TABLE IF EXISTS #snapshot_tables;
 
@@ -25,13 +26,12 @@ SELECT
     t.name AS table_name,
     TRY_CONVERT(DATE, RIGHT(t.name, 8), 112) AS snapshot_date
 INTO #snapshot_tables
-FROM BRONZE.sys.tables t   -- explicit DB prefix: sys.tables is otherwise scoped to whatever DB the session is currently connected to
-WHERE t.name LIKE 'memship\_________' ESCAPE '\'   -- memship_ + 8 digits
+FROM BRONZE.sys.tables t
+WHERE t.name LIKE 'memship\_________' ESCAPE '\'
   AND TRY_CONVERT(DATE, RIGHT(t.name, 8), 112) IS NOT NULL;
 
 IF @ManualToday IS NOT NULL AND @ManualYday IS NOT NULL
 BEGIN
-    -- Manual mode: use the two dates supplied above
     SELECT @TodayTable = table_name, @RunDate = snapshot_date
     FROM #snapshot_tables WHERE snapshot_date = @ManualToday;
 
@@ -46,7 +46,6 @@ BEGIN
 END
 ELSE
 BEGIN
-    -- Auto mode: pick the latest two available snapshots
     DROP TABLE IF EXISTS #latest_two;
 
     SELECT TOP 2
@@ -66,85 +65,62 @@ END
 PRINT 'Today table: ' + @TodayTable + '  (run_date = ' + CONVERT(VARCHAR(10), @RunDate, 23) + ')';
 PRINT 'Yday table:  ' + @YdayTable  + '  (pre_snapshot_date = ' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + ')';
 
--- Build and run the comparison dynamically against whichever two tables were resolved above
+-- Reusable product filter: keep Hospital ('H') and Extras ('A'), drop Ambulance ('B');
+-- drop Overseas (product_code OSC/NZO/FCO) - UNCONFIRMED, pending sign-off from Product owner
+SET @ProductFilter = N'
+  AND EXISTS (
+        SELECT 1
+        FROM BRONZE.dbo.cover_product cp
+        JOIN BRONZE.dbo.product p ON p.product_id = cp.product_id
+        WHERE cp.membership_id = today.membership_id
+          AND p.product_type IN (''H'', ''A'')
+          AND p.product_code NOT IN (''OSC'', ''NZO'', ''FCO'')
+      )';
+
 SET @SQL = N'
-SELECT
-    ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''' AS run_date,
-    ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''' AS pre_snapshot_date,
-    ''Join'' AS movement_type,
-    today.membership_id,
-    NULL AS status_yday,
-    today.memship_status AS status_today,
-    today.effective_join_date,
-    today.effective_rejoin_date,
-    today.effective_termination_date
+SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''' AS run_date, ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''' AS pre_snapshot_date,
+    ''Join'' AS movement_type, today.membership_id, NULL AS status_yday, today.memship_status AS status_today,
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
-LEFT JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
-    ON yday.membership_id = today.membership_id
+LEFT JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.membership_id IS NULL
   AND today.memship_status = ''A''
-  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6' + @ProductFilter + N'
 
 UNION ALL
 
--- Join: existed yesterday as P (pending/future-dated), is A today - confirmed this counts as a join
-SELECT
-    ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''',
-    ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
-    ''Join'',
-    today.membership_id,
-    yday.memship_status,
-    today.memship_status,
-    today.effective_join_date,
-    today.effective_rejoin_date,
-    today.effective_termination_date
+SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''', ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
+    ''Join'', today.membership_id, yday.memship_status, today.memship_status,
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
-JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
-    ON yday.membership_id = today.membership_id
+JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''P''
   AND today.memship_status = ''A''
-  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6' + @ProductFilter + N'
 
 UNION ALL
 
-SELECT
-    ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''',
-    ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
-    ''Rejoin'',
-    today.membership_id,
-    yday.memship_status,
-    today.memship_status,
-    today.effective_join_date,
-    today.effective_rejoin_date,
-    today.effective_termination_date
+SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''', ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
+    ''Rejoin'', today.membership_id, yday.memship_status, today.memship_status,
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
-JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
-    ON yday.membership_id = today.membership_id
+JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''T''
   AND today.memship_status = ''A''
-  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6' + @ProductFilter + N'
 
 UNION ALL
 
-SELECT
-    ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''',
-    ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
-    ''Termination'',
-    today.membership_id,
-    yday.memship_status,
-    today.memship_status,
-    today.effective_join_date,
-    today.effective_rejoin_date,
-    today.effective_termination_date
+SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''', ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
+    ''Termination'', today.membership_id, yday.memship_status, today.memship_status,
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
-JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
-    ON yday.membership_id = today.membership_id
+JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''A''
   AND today.memship_status = ''T''
-  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6' + @ProductFilter + N'
 
-ORDER BY movement_type, membership_id;
-';
+ORDER BY movement_type, membership_id;';
 
 EXEC sp_executesql @SQL;
 
