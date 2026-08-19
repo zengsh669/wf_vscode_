@@ -87,6 +87,26 @@ WHERE yday.membership_id IS NULL
 
 UNION ALL
 
+-- Join: existed yesterday as P (pending/future-dated), is A today - confirmed this counts as a join
+SELECT
+    ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''',
+    ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
+    ''Join'',
+    today.membership_id,
+    yday.memship_status,
+    today.memship_status,
+    today.effective_join_date,
+    today.effective_rejoin_date,
+    today.effective_termination_date
+FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
+JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
+    ON yday.membership_id = today.membership_id
+WHERE yday.memship_status = ''P''
+  AND today.memship_status = ''A''
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
+
+UNION ALL
+
 SELECT
     ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''',
     ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
