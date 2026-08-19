@@ -25,7 +25,7 @@ SELECT
     t.name AS table_name,
     TRY_CONVERT(DATE, RIGHT(t.name, 8), 112) AS snapshot_date
 INTO #snapshot_tables
-FROM sys.tables t
+FROM BRONZE.sys.tables t   -- explicit DB prefix: sys.tables is otherwise scoped to whatever DB the session is currently connected to
 WHERE t.name LIKE 'memship\_________' ESCAPE '\'   -- memship_ + 8 digits
   AND TRY_CONVERT(DATE, RIGHT(t.name, 8), 112) IS NOT NULL;
 
@@ -82,6 +82,8 @@ FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
 LEFT JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
     ON yday.membership_id = today.membership_id
 WHERE yday.membership_id IS NULL
+  AND today.memship_status = ''A''
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
 
 UNION ALL
 
@@ -100,6 +102,7 @@ JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
     ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''T''
   AND today.memship_status = ''A''
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
 
 UNION ALL
 
@@ -118,6 +121,7 @@ JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday
     ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''A''
   AND today.memship_status = ''T''
+  AND LEN(CAST(today.membership_id AS VARCHAR(20))) <= 6   -- exclude quotes (id > 6 digits, not a real membership)
 
 ORDER BY movement_type, membership_id;
 ';
