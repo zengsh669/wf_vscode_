@@ -66,21 +66,36 @@ PRINT 'Today table: ' + @TodayTable + '  (run_date = ' + CONVERT(VARCHAR(10), @R
 PRINT 'Yday table:  ' + @YdayTable  + '  (pre_snapshot_date = ' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + ')';
 
 -- Reusable product filter: keep Hospital ('H') and Extras ('A'), drop Ambulance ('B');
--- drop Overseas (product_code OSC/NZO/FCO) - UNCONFIRMED, pending sign-off from Product owner
+-- drop Overseas product codes as advised (extended list: OSC/NZO/FCO plus OWEA/OWEB/OWSA/OWSB/OWCA/OWCB).
+-- cover_product holds one row per cover_version, and a member can have many old versions with
+-- different (and possibly overseas) products - only the latest version reflects their current
+-- product, so both this filter and the display column below restrict to MAX(cover_version).
 SET @ProductFilter = N'
   AND EXISTS (
         SELECT 1
         FROM BRONZE.dbo.cover_product cp
         JOIN BRONZE.dbo.product p ON p.product_id = cp.product_id
         WHERE cp.membership_id = today.membership_id
+          AND cp.cover_version = (SELECT MAX(cover_version) FROM BRONZE.dbo.cover_product WHERE membership_id = cp.membership_id)
           AND p.product_type IN (''H'', ''A'')
-          AND p.product_code NOT IN (''OSC'', ''NZO'', ''FCO'')
+          AND p.product_code NOT IN (''OSC'', ''NZO'', ''FCO'', ''OWEA'', ''OWEB'', ''OWSA'', ''OWSB'', ''OWCA'', ''OWCB'')
       )';
+
+-- Display-only column: this member''s CURRENT (latest cover_version) product_type/product_code
+-- combos, comma-separated. Uses STRING_AGG (not a JOIN) so it stays one scalar value per row -
+-- membership_id rows are not duplicated even where the latest version has multiple product rows
+-- (e.g. Hospital + Extras).
+DECLARE @ProductInfoColumn NVARCHAR(MAX) = N'
+    (SELECT STRING_AGG(CONCAT(p.product_type, '':'', p.product_code), '', '')
+     FROM BRONZE.dbo.cover_product cp
+     JOIN BRONZE.dbo.product p ON p.product_id = cp.product_id
+     WHERE cp.membership_id = today.membership_id
+       AND cp.cover_version = (SELECT MAX(cover_version) FROM BRONZE.dbo.cover_product WHERE membership_id = cp.membership_id)) AS product_info';
 
 SET @SQL = N'
 SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''' AS run_date, ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''' AS pre_snapshot_date,
     ''Join'' AS movement_type, today.membership_id, NULL AS status_yday, today.memship_status AS status_today,
-    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date,' + @ProductInfoColumn + N'
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
 LEFT JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.membership_id IS NULL
@@ -91,7 +106,7 @@ UNION ALL
 
 SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''', ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
     ''Join'', today.membership_id, yday.memship_status, today.memship_status,
-    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date,' + @ProductInfoColumn + N'
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
 JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''P''
@@ -102,7 +117,7 @@ UNION ALL
 
 SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''', ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
     ''Rejoin'', today.membership_id, yday.memship_status, today.memship_status,
-    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date,' + @ProductInfoColumn + N'
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
 JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''T''
@@ -113,7 +128,7 @@ UNION ALL
 
 SELECT ''' + CONVERT(VARCHAR(10), @RunDate, 23) + N''', ''' + CONVERT(VARCHAR(10), @PreSnapshotDate, 23) + N''',
     ''Termination'', today.membership_id, yday.memship_status, today.memship_status,
-    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date
+    today.effective_join_date, today.effective_rejoin_date, today.effective_termination_date,' + @ProductInfoColumn + N'
 FROM BRONZE.dbo.' + QUOTENAME(@TodayTable) + N' today
 JOIN BRONZE.dbo.' + QUOTENAME(@YdayTable) + N' yday ON yday.membership_id = today.membership_id
 WHERE yday.memship_status = ''A''
