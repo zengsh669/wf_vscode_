@@ -17,3 +17,9 @@ __pycache__/
 
 # JSON parameters
 sql_db/ADF_parametres/*.json
+
+# dbt
+sql_db/dbt_westfund/.venv/
+sql_db/dbt_westfund/target/
+sql_db/dbt_westfund/dbt_packages/
+sql_db/dbt_westfund/logs/

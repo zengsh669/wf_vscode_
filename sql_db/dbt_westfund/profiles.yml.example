@@ -1,0 +1,34 @@
+# Template only — do not put real credentials in this file.
+# Copy the relevant target to your real profiles.yml at:
+#   Windows: %USERPROFILE%\.dbt\profiles.yml
+#   (this file is NOT read by dbt directly; it's a checked-in reference)
+
+westfund_dwh:
+  target: sandbox
+  outputs:
+
+    sandbox:
+      type: sqlserver
+      driver: 'ODBC Driver 17 for SQL Server'
+      server: rpsqlrp01
+      database: SANDBOX
+      schema: dbo
+      port: 1433
+      # Pick ONE auth method depending on what IT provisions:
+      # authentication: sql
+      # user: "{{ env_var('DBT_SANDBOX_USER') }}"
+      # password: "{{ env_var('DBT_SANDBOX_PASSWORD') }}"
+      authentication: ActiveDirectoryIntegrated
+      threads: 4
+
+    # Future target once CI/CD -> Silver deployment is separately approved.
+    # Not usable until then — placeholder only.
+    # silver:
+    #   type: sqlserver
+    #   driver: 'ODBC Driver 17 for SQL Server'
+    #   server: rpsqlrp01
+    #   database: SILVER
+    #   schema: dbo
+    #   port: 1433
+    #   authentication: ActiveDirectoryIntegrated
+    #   threads: 4
