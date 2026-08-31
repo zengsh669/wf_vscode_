@@ -319,7 +319,11 @@ User confirmed via query that these 6 IDs are `BRONZE.dbo.product.product_id` va
 `product_type = 'H'`) — same numbering system as `group_key_full_by_branch.hosp_product_id`,
 safe to reuse. **User decided to adopt this exclusion**, even though it has no Qlik-side
 justification found in `membership_new.md` — added to both historical and current-month
-slices in `validate_membership_movement.sql`.
+slices in `validate_membership_movement.sql`. Confirmed this exclusion was added to
+`Membership_Reporting` itself on 2026-02-27 (per an inline comment in that view's
+definition, `-- added on 27/02/2026 exclude OVHC products`) — a recent addition to the
+official view, not a long-standing pattern, and copied verbatim (same table, same field
+names) into this project's validation query.
 
 **Historical:** reuses the exact pattern above (`group_key_full_by_branch`).
 
@@ -337,6 +341,55 @@ on the same `cover_version` (mirroring the historical side's `extras_product_id 
 and current-month (live `cover`/`cover_product`/`product` join) exclusion paths for both
 Ambulance and OVHC are expected to be logically equivalent but have never been tested against
 the same known cases to confirm they actually produce identical membership sets.
+
+**Historical "lifetime check" impact — measured, negligible (resolved 2026-09-01).** The
+historical exclusion is not month-aligned (see [`rundate` vs `[Run Month]`
+Bug](#rundate-vs-run-month-bug--fixed) for the original finding): it checks whether a member
+has *ever* had a `group_key_full_by_branch` row matching the OVHC condition, not specifically
+in the `[Run Month]` being evaluated, so a member who held OVHC once and later switched to a
+different product would still have all of their historical Join/Termination rows excluded.
+Ran a diagnostic query to quantify actual impact: found members with both an OVHC-matching
+row and a non-OVHC-matching row in `group_key_full_by_branch` (i.e. members who switched),
+then counted how many of their `Membership_Group_Key` Join/Termination rows are currently
+being excluded by the lifetime check.
+
+```sql
+WITH MemberOVHCFlags AS (
+    SELECT
+        b.membership_id,
+        MAX(CASE WHEN b.hosp_product_id IN (191,192,193,194,195,196)
+                   AND b.extras_product_id IS NULL THEN 1 ELSE 0 END) AS HasOVHC,
+        MAX(CASE WHEN NOT (b.hosp_product_id IN (191,192,193,194,195,196)
+                   AND b.extras_product_id IS NULL) THEN 1 ELSE 0 END) AS HasNonOVHC
+    FROM BRONZE.dbo.group_key_full_by_branch b
+    GROUP BY b.membership_id
+),
+SwitchedMembers AS (
+    SELECT membership_id FROM MemberOVHCFlags WHERE HasOVHC = 1 AND HasNonOVHC = 1
+)
+SELECT
+    (SELECT COUNT(*) FROM SwitchedMembers) AS Members_Who_Switched,
+    (SELECT COUNT(*) FROM SILVER.dbo.Membership_Group_Key gk
+     WHERE gk.[Membership Status] IN ('J', 'T')
+       AND gk.[Membership Number] IN (SELECT membership_id FROM SwitchedMembers)
+       AND EXISTS (
+           SELECT 1 FROM BRONZE.dbo.group_key_full_by_branch b
+           WHERE b.membership_id = gk.[Membership Number]
+             AND b.hosp_product_id IN (191, 192, 193, 194, 195, 196)
+             AND b.extras_product_id IS NULL
+       )
+    ) AS Excluded_Movement_Rows;
+-- Result: Members_Who_Switched = 1, Excluded_Movement_Rows = 1
+```
+
+**Decision: keep the lifetime check as-is, no code change.** Only 1 member across all of
+`group_key_full_by_branch` history has both an OVHC-matching row and a non-OVHC-matching row,
+and only 1 Join/Termination row is affected by the month-alignment gap. Month-aligning this
+exclusion (e.g. joining on `rundate`/`[Run Month]`) would cost a logic change, a duplicate
+edit in Query 2's copy of the CTE, and re-validation, for a one-row correction — not
+worthwhile. Also keeps this project's query consistent with the pattern already live in
+`GOLD.dbo.Membership_Reporting` (see note above), which uses the same lifetime check.
+Revisit only if a future data refresh shows this count growing materially.
 
 ---
 
@@ -393,14 +446,16 @@ throughout this file (see [Cutover Date](#cutover-date--resolved-superseded-orig
 was measured *before* this fix, so the actual current gap is likely smaller now that a
 previously-missing month is included, but hasn't been re-measured.
 
-**Not fixed (separate, pre-existing issue, flagged not resolved):** the historical-side
-OVHC exclusion (`NOT EXISTS` against `BRONZE.dbo.group_key_full_by_branch`, see [OVHC
-Exclusion](#ovhc-overseas-visitor-health-cover-exclusion)) checks by `membership_id` only,
-with no `rundate`/`runmonth` filter tying it to the specific `[Run Month]` row being
+**Separate, pre-existing issue — measured and accepted, not fixed (resolved 2026-09-01):**
+the historical-side OVHC exclusion (`NOT EXISTS` against `BRONZE.dbo.group_key_full_by_branch`,
+see [OVHC Exclusion](#ovhc-overseas-visitor-health-cover-exclusion)) checks by `membership_id`
+only, with no `rundate`/`runmonth` filter tying it to the specific `[Run Month]` row being
 evaluated — it's a global "has this member ever had an OVHC product" check, not a per-month
 one. This is a different, pre-existing simplification (inherited from the
 `GOLD.dbo.Membership_Reporting` pattern this was borrowed from) — not introduced or
-addressed by the `Run Month` fix above.
+addressed by the `Run Month` fix above. Quantified: only 1 member / 1 Join-Termination row
+across all history is affected by this gap — see [OVHC Exclusion](#ovhc-overseas-visitor-health-cover-exclusion)
+for the diagnostic query and decision to leave as-is.
 
 ---
 
@@ -654,12 +709,17 @@ them before acting on any of these.
 - Historical vs. current-month Ambulance/OVHC exclusion paths (different source tables) have
   never been tested against the same known cases to confirm equivalent results. See [OVHC
   Exclusion](#ovhc-overseas-visitor-health-cover-exclusion).
-- The historical OVHC exclusion is not month-aligned — it checks whether a member has *ever*
-  had an OVHC product across all of `group_key_full_by_branch`, not specifically as of the
-  `[Run Month]` being evaluated. Pre-existing, not introduced by the Run Month fix. See
-  [`rundate` vs `[Run Month]` Bug](#rundate-vs-run-month-bug--fixed).
 - `[Membership Status] IN ('A','J')` for Total Members at Point (if reinstated) was never
   checked against the full distinct value list of that column.
+
+**Verified and accepted, no change needed (resolved 2026-09-01):**
+- The historical OVHC exclusion is not month-aligned — it checks whether a member has *ever*
+  had an OVHC product across all of `group_key_full_by_branch`, not specifically as of the
+  `[Run Month]` being evaluated. Quantified via diagnostic query: only 1 member / 1 row
+  across all history is actually affected by this gap. Decision: keep as-is — also matches
+  the pattern already live in `GOLD.dbo.Membership_Reporting`. See [OVHC
+  Exclusion](#ovhc-overseas-visitor-health-cover-exclusion) and [`rundate` vs `[Run Month]`
+  Bug](#rundate-vs-run-month-bug--fixed).
 
 **Known but deliberately deferred (documented, not planned to fix soon):**
 - Qlik's `Coalesce(current, previous month)` fallback for blank Sales Channel is missing
