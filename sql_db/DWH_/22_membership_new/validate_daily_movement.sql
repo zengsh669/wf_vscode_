@@ -47,7 +47,12 @@ DailyMovement AS (
     SELECT
         m.effective_join_date                              AS MovementDate,
         m.membership_id                                    AS Membership_ID,
-        'Join'                                              AS Movement_Type
+        'Join'                                              AS Movement_Type,
+        m.memship_status                                    AS Memship_Status,
+        m.termination_code                                  AS Termination_Code,
+        m.create_operator                                   AS Create_Operator,
+        m.fund_id                                           AS Fund_Id,
+        m.state                                             AS State
     FROM BRONZE.dbo.memship m
     WHERE m.effective_join_date >= @WindowStart
       AND m.effective_join_date < @WindowEnd
@@ -60,7 +65,12 @@ DailyMovement AS (
     SELECT
         m.effective_termination_date                       AS MovementDate,
         m.membership_id                                    AS Membership_ID,
-        'Termination'                                       AS Movement_Type
+        'Termination'                                       AS Movement_Type,
+        m.memship_status                                    AS Memship_Status,
+        m.termination_code                                  AS Termination_Code,
+        m.create_operator                                   AS Create_Operator,
+        m.fund_id                                           AS Fund_Id,
+        m.state                                             AS State
     FROM BRONZE.dbo.memship m
     WHERE m.effective_termination_date >= @WindowStart
       AND m.effective_termination_date < @WindowEnd
@@ -70,8 +80,12 @@ DailyMovement AS (
 )
 SELECT
     MovementDate,
-    SUM(CASE WHEN Movement_Type = 'Join' THEN 1 ELSE 0 END)         AS Joins,
-    SUM(CASE WHEN Movement_Type = 'Termination' THEN 1 ELSE 0 END)  AS Terminations
+    Membership_ID,
+    Movement_Type,
+    Memship_Status,
+    Termination_Code,
+    Create_Operator,
+    Fund_Id,
+    State
 FROM DailyMovement
-GROUP BY MovementDate
-ORDER BY MovementDate;
+ORDER BY MovementDate, Membership_ID;
