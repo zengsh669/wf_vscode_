@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -29,7 +29,7 @@
 </head>
 <body>
     <h1>Data Warehouse &mdash; Full Lineage Table</h1>
-    <p class="subtitle">Regenerated from notebooks: 2026-06-29 &nbsp;|&nbsp; 21 Gold Views &nbsp;&middot;&nbsp; 40 Silver Tables &nbsp;&middot;&nbsp; 38 Silver SPs &nbsp;&middot;&nbsp; ~101 Bronze Tables</p>
+    <p class="subtitle">Regenerated from notebooks: 2026-09-01 &nbsp;|&nbsp; 28 Gold Views &nbsp;&middot;&nbsp; 47 Silver Tables &nbsp;&middot;&nbsp; 45 Silver SPs &nbsp;&middot;&nbsp; ~122 Bronze Tables</p>
     <h2>Silver Tables &mdash; Gold Views, SPs &amp; Bronze Sources</h2>
     <p class="section-note">Sorted by pipeline / execution dependency order. Gold column shows which Gold Views read the table. Silver Inputs column shows Silver-to-Silver dependencies. Bronze sources derived from actual notebook SQL with comments stripped.</p>
     <table>
@@ -83,7 +83,7 @@
             <td><span class="badge sp">usp_generate_episode_condition_group</span></td>
             <td><div class="gold-col"><span class="badge gold">vw_HCS_Claims</span></div></td>
             <td><div class="bronze-list"><span class="badge silver">Episode_Classification</span></div></td>
-            <td><div class="bronze-list"><span class="badge bronze"></span></div></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr><td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">Claims &amp; Lookups</td></tr>
         <tr>
@@ -139,7 +139,7 @@
         <tr>
             <td><span class="badge silver">Membership_Group_Key</span></td>
             <td><span class="badge sp">Membership_Group_Key_Load</span></td>
-            <td><div class="gold-col"><span class="badge gold">Membership_Product_Type</span><span class="badge gold">ME_Membership_Terminations</span><span class="badge gold">Membership_Reporting</span><span class="badge gold">Membership_Movement</span><span class="badge gold">ME_Membership_Joins</span><span class="badge gold">ME_Total_Membership</span></div></td>
+            <td><div class="gold-col"><span class="badge gold">ME_Membership_Joins</span><span class="badge gold">ME_Membership_Terminations</span><span class="badge gold">ME_Total_Membership</span><span class="badge gold">Membership_Movement</span><span class="badge gold">Membership_Product_Type</span><span class="badge gold">Membership_Reporting</span><span class="badge gold">vw_Membership_Retention_Rate</span></div></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">group_key_full_by_branch</span><span class="badge bronze">Membership_Channel_Map</span><span class="badge bronze">Membership_Fund_Map</span></div></td>
         </tr>
@@ -148,7 +148,7 @@
             <td><span class="badge sp">Membership_History_Load</span></td>
             <td><div class="gold-col"><span class="badge gold">ME_Membership_Terminations</span><span class="badge gold">Membership_Reporting</span></div></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze">Membership_Fund_Map</span><span class="badge bronze">person_</span><span class="badge bronze">person_20260529</span><span class="badge bronze">person_membership_</span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">Membership_Fund_Map</span><span class="badge bronze">person_</span><span class="badge bronze">person_20260831</span><span class="badge bronze">person_membership_</span><span class="badge bronze">sys.tables</span></div></td>
         </tr>
         <tr>
             <td><span class="badge silver">Membership_Budget</span></td>
@@ -160,7 +160,7 @@
         <tr>
             <td><span class="badge silver">Product</span></td>
             <td><span class="badge sp">Product_Load</span></td>
-            <td><div class="gold-col"><span class="badge gold">ME_Membership_Terminations</span><span class="badge gold">Membership_Reporting</span><span class="badge gold">Membership_Movement</span><span class="badge gold">ME_Membership_Joins</span><span class="badge gold">ME_Total_Membership</span><span class="badge gold">Membership_Budget</span></div></td>
+            <td><div class="gold-col"><span class="badge gold">ME_Membership_Joins</span><span class="badge gold">ME_Membership_Terminations</span><span class="badge gold">ME_Total_Membership</span><span class="badge gold">Membership_Budget</span><span class="badge gold">Membership_Movement</span><span class="badge gold">Membership_Reporting</span></div></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">Membership_Product_Map</span><span class="badge bronze">product</span></div></td>
         </tr>
@@ -176,7 +176,7 @@
             <td><span class="badge sp">usp_Load_Product_Premium</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge silver">Member_Products</span></div></td>
-            <td><div class="bronze-list"><span class="badge bronze"></span></div></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge silver">Current_Product_Fee</span></td>
@@ -217,6 +217,34 @@
         <tr>
             <td><span class="badge silver">AgentAgreementStatus</span></td>
             <td><span class="badge sp">LoadAgentAgreementStatus</span></td>
+            <td><div class="gold-col"><span class="badge gold">vw_Agreement_Renewals</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">billing_freq</span><span class="badge bronze">billing_group</span><span class="badge bronze">grouping</span><span class="badge bronze">MemberAgent</span><span class="badge bronze">MemberCorrespondance</span><span class="badge bronze">MemberCover</span><span class="badge bronze">MemberGroup</span><span class="badge bronze">membership_billing_group</span><span class="badge bronze">memship</span><span class="badge bronze">PersonContact</span><span class="badge bronze">receipt</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">Payment_Channel</span></td>
+            <td><span class="badge sp">usp_Load_Payment_Channel</span></td>
+            <td><div class="gold-col"><span class="badge gold">vw_Payment_Channel_By_Month</span><span class="badge gold">vw_Payment_Channel_Latest</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">account</span><span class="badge bronze">billing_freq</span><span class="badge bronze">billing_group</span><span class="badge bronze">group_key_full_by_branch</span><span class="badge bronze">membership_billing_group</span><span class="badge bronze">memship</span><span class="badge bronze">person</span><span class="badge bronze">person_membership</span><span class="badge bronze">receipt</span><span class="badge bronze">receipt_method</span><span class="badge bronze">receipt_method_type</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">Member_Payment_Arrears</span></td>
+            <td><span class="badge sp">usp_Load_Member_Payment_Arrears</span></td>
+            <td><div class="gold-col"><span class="badge gold">vw_Member_Payment_Arrears</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">account</span><span class="badge bronze">billing_freq</span><span class="badge bronze">billing_group</span><span class="badge bronze">group_key_full_by_branch</span><span class="badge bronze">memship</span><span class="badge bronze">receipt</span><span class="badge bronze">receipt_method</span><span class="badge bronze">receipt_method_type</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">Dental_Financial_Detail</span></td>
+            <td><span class="badge sp">usp_Load_Dental_Financial_Detail</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">sag.GLAFS</span><span class="badge bronze">sag.GLAMF</span><span class="badge bronze">sag.GLASV</span><span class="badge bronze">sag.GLPOST</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">Agent_Monthly_Snapshot</span></td>
+            <td><span class="badge sp">LoadAgentMonthlySnapshot</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">grouping</span></div></td>
@@ -264,6 +292,35 @@
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">memship</span><span class="badge bronze">person_membership</span><span class="badge bronze">person_previous_fund</span><span class="badge bronze">previous_fund</span></div></td>
         </tr>
+        <tr>
+            <td><span class="badge silver">Member_Daily_Movement</span></td>
+            <td><span class="badge sp">usp_Load_Member_Daily_Movement</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">cover_product</span><span class="badge bronze">product</span><span class="badge bronze">sys.tables</span></div></td>
+        </tr>
+        <tr><td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">Member Communications &amp; Feedback</td></tr>
+        <tr>
+            <td><span class="badge silver">Member_Notes</span></td>
+            <td><span class="badge sp">usp_Load_Member_Notes</span></td>
+            <td><div class="gold-col"><span class="badge gold">vw_Member_Notes</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">note</span><span class="badge bronze">sub_ref_type</span><span class="badge bronze">sub_sub_ref_type</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">Member_Comms_Detail</span></td>
+            <td><span class="badge sp">usp_Load_Member_Comms_Detail</span></td>
+            <td><div class="gold-col"><span class="badge gold">vw_Member_Comms_Detail</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">memship</span><span class="badge bronze">memship_app</span><span class="badge bronze">person_membership</span><span class="badge bronze">PersonContact</span><span class="badge bronze">web_security</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge silver">NPS_Score</span></td>
+            <td><span class="badge sp">usp_Load_NPS_Score</span></td>
+            <td><div class="gold-col"><span class="badge gold">Qualtrics_NPS_Score</span><span class="badge gold">vw_Provider_Reference</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><div class="bronze-list"><span class="badge bronze">qua.Qualtrics_CSAT</span><span class="badge bronze">qua.Qualtrics_HealthServices</span><span class="badge bronze">qua.Qualtrics_MentalHealth</span><span class="badge bronze">qua.Qualtrics_POC</span><span class="badge bronze">qua.Qualtrics_Wellbeing</span><span class="badge bronze">qua.Qualtrics_Wellbeing_V2</span></div></td>
+        </tr>
         <tr><td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">Reference &amp; Lookup</td></tr>
         <tr>
             <td><span class="badge silver">Termination_Code</span></td>
@@ -277,7 +334,7 @@
             <td><span class="badge sp">usp_Load_QMS_Recording_Detail</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze">Flag_Details [qms]</span><span class="badge bronze">Recording_Details [qms]</span><span class="badge bronze">User_Details [qms]</span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">qms.Flag_Details</span><span class="badge bronze">qms.Recording_Details</span><span class="badge bronze">qms.User_Details</span></div></td>
         </tr>
         <tr>
             <td><span class="badge silver">RPA_Consolidated</span></td>
@@ -292,34 +349,27 @@
             <td><span class="badge sp">usp_CheckHealth [obs]</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze">INFORMATION_SCHEMA.TABLES (dbo/GOV)</span></div></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge silver">ETL_SchemaDrift [obs]</span></td>
             <td><span class="badge sp">usp_CheckHealth [obs]</span></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge silver">ETL_SchemaSnapshot [obs]</span></div></td>
-            <td><div class="bronze-list"><span class="badge bronze">INFORMATION_SCHEMA.COLUMNS (dbo/GOV)</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge silver">ETL_SchemaSnapshot [obs]</span></td>
             <td><span class="badge sp">usp_CheckHealth [obs]</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze">INFORMATION_SCHEMA.COLUMNS (dbo/GOV)</span></div></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr><td colspan="5" style="background:#1a1a2e;color:#c0c0c0;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">Governance</td></tr>
         <tr>
-            <td><span class="badge silver">glossary_cleaned</span></td>
-            <td><span class="badge sp">usp_Load_GOV_Glossary_Cleaned</span></td>
-            <td><span class="na">&mdash;</span></td>
-            <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze">Westfund_Enterprise_Glossary</span></div></td>
-        </tr>
-        <tr>
-            <td><span class="badge silver">glossary_full_cleaned</span></td>
+            <td><span class="badge silver">glossary_full_cleaned [GOV]</span></td>
             <td><span class="badge sp">usp_Load_GOV_Glossary_Full_Cleaned</span></td>
-            <td><div class="gold-col"><span class="badge gold">vw_glossary_hierarchy</span></div></td>
+            <td><span class="na">&mdash;</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">Westfund_Enterprise_Glossary</span></div></td>
         </tr>
@@ -334,78 +384,118 @@
         <tbody>
         <tr>
             <td><span class="badge gold">Claim_Aggr</span></td>
-            <td><div class="gold-col"><span class="badge silver">Claim_Fact</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Claim_Fact</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">ME_Membership_Joins</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">ME_Membership_Terminations</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Membership_History</span><span class="badge silver">Product</span><span class="badge silver">Termination_Code</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Membership_History</span><span class="badge silver">Product</span><span class="badge silver">Termination_Code</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">ME_Total_Membership</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">Membership_Budget</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Budget</span><span class="badge silver">Product</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Budget</span><span class="badge silver">Product</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">Membership_Movement</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Product</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">Membership_Product_Type</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">Membership_Reporting</span></td>
-            <td><div class="gold-col"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Membership_History</span><span class="badge silver">Product</span><span class="badge silver">Termination_Code</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span><span class="badge silver">Membership_History</span><span class="badge silver">Product</span><span class="badge silver">Termination_Code</span></div></td>
             <td><div class="bronze-list"><span class="badge bronze">group_key_full_by_branch</span></div></td>
         </tr>
         <tr>
+            <td><span class="badge gold">Qualtrics_NPS_Score</span></td>
+            <td><div class="bronze-list"><span class="badge silver">NPS_Score</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Agreement_Renewals</span></td>
+            <td><div class="bronze-list"><span class="badge silver">AgentAgreementStatus</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
             <td><span class="badge gold">vw_Calculated_Deficit</span></td>
-            <td><div class="gold-col"><span class="badge silver">ClaimDetailsAtService_optimised</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">ClaimDetailsAtService_optimised</span></div></td>
             <td><div class="bronze-list"><span class="badge bronze">claim_generalitem</span><span class="badge bronze">claim_hospitalitem</span><span class="badge bronze">claim_line</span><span class="badge bronze">group_key_full_by_branch</span><span class="badge bronze">memship</span><span class="badge bronze">person</span></div></td>
         </tr>
         <tr>
             <td><span class="badge gold">vw_calculated_deficit_amb_levies_output</span></td>
-            <td><div class="gold-col"><span class="badge silver">CD_AL_Cover_Group_Keys</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">CD_AL_Cover_Group_Keys</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">vw_Claim_Benefit_Summary</span></td>
-            <td><div class="gold-col"><span class="badge silver">Claim_Line_Detail</span></div></td>
-            <td><span class="na">&mdash;</span></td>
-        </tr>
-        <tr>
-            <td><span class="badge gold">vw_glossary_hierarchy [GOV]</span></td>
-            <td><div class="gold-col"><span class="badge silver">glossary_full_cleaned</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">Claim_Line_Detail</span></div></td>
             <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge gold">vw_HCS_Claims</span></td>
-            <td><div class="gold-col"><span class="badge silver">ClaimDetailsAtService_optimised</span><span class="badge silver">Episode_Classification</span><span class="badge silver">Episode_Condition_Group</span></div></td>
+            <td><div class="bronze-list"><span class="badge silver">ClaimDetailsAtService_optimised</span><span class="badge silver">Episode_Classification</span><span class="badge silver">Episode_Condition_Group</span></div></td>
             <td><div class="bronze-list"><span class="badge bronze">claim_generalitem</span><span class="badge bronze">claim_hospitalitem</span><span class="badge bronze">claim_line</span><span class="badge bronze">claim_line_status_type</span><span class="badge bronze">cover_type</span><span class="badge bronze">fund_classification</span><span class="badge bronze">item</span><span class="badge bronze">item_group</span><span class="badge bronze">memship</span><span class="badge bronze">person</span><span class="badge bronze">person_membership</span><span class="badge bronze">PersonAddressHomePostal</span><span class="badge bronze">provider</span><span class="badge bronze">provider_number</span><span class="badge bronze">provider_type</span><span class="badge bronze">service_type</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Member_Comms_Detail</span></td>
+            <td><div class="bronze-list"><span class="badge silver">Member_Comms_Detail</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Member_Notes</span></td>
+            <td><div class="bronze-list"><span class="badge silver">Member_Notes</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Member_Payment_Arrears</span></td>
+            <td><div class="bronze-list"><span class="badge silver">Member_Payment_Arrears</span></div></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge orange">vw_Membership_Current</span></td>
             <td><span class="na">&mdash;</span></td>
-            <td><div class="bronze-list"><span class="badge bronze">cover</span><span class="badge bronze">cover_product</span><span class="badge bronze">grouping</span><span class="badge bronze">memship</span><span class="badge bronze">memship_20260529</span><span class="badge bronze">operator</span><span class="badge bronze">person_membership</span><span class="badge bronze">product</span><span class="badge bronze">promotion</span><span class="badge bronze">promotion_reference</span><span class="badge bronze">promotion_sales_channel</span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">cover</span><span class="badge bronze">cover_product</span><span class="badge bronze">grouping</span><span class="badge bronze">memship</span><span class="badge bronze">memship_20260831</span><span class="badge bronze">operator</span><span class="badge bronze">person_membership</span><span class="badge bronze">product</span><span class="badge bronze">promotion</span><span class="badge bronze">promotion_reference</span><span class="badge bronze">promotion_sales_channel</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Membership_Retention_Rate</span></td>
+            <td><div class="bronze-list"><span class="badge silver">Membership_Group_Key</span></div></td>
+            <td><span class="na">&mdash;</span></td>
         </tr>
         <tr>
             <td><span class="badge orange">vw_ovhc</span></td>
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">country_code</span><span class="badge bronze">cover</span><span class="badge bronze">cover_product</span><span class="badge bronze">grouping</span><span class="badge bronze">memship</span><span class="badge bronze">memship_app_agent</span><span class="badge bronze">memship_app_dep</span><span class="badge bronze">memship_app_sales_promo</span><span class="badge bronze">product</span><span class="badge bronze">promotion_sales_channel</span><span class="badge bronze">visa_type</span></div></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Payment_Channel_By_Month</span></td>
+            <td><div class="bronze-list"><span class="badge silver">Payment_Channel</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Payment_Channel_Latest</span></td>
+            <td><div class="bronze-list"><span class="badge silver">Payment_Channel</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
+        <tr>
+            <td><span class="badge gold">vw_Provider_Reference</span></td>
+            <td><div class="bronze-list"><span class="badge silver">NPS_Score</span></div></td>
+            <td><div class="bronze-list"><span class="badge bronze">provider</span><span class="badge bronze">provider_number</span><span class="badge bronze">provider_type</span></div></td>
         </tr>
         <tr>
             <td><span class="badge orange">vw_RebateLineCheck</span></td>
@@ -422,21 +512,16 @@
             <td><span class="na">&mdash;</span></td>
             <td><div class="bronze-list"><span class="badge bronze">MemberBranch</span><span class="badge bronze">MemberCover</span><span class="badge bronze">MemberRebate</span><span class="badge bronze">memship</span><span class="badge bronze">person</span><span class="badge bronze">person_membership</span><span class="badge bronze">PersonAddressHomePostal</span><span class="badge bronze">PersonContact</span><span class="badge bronze">rebate</span><span class="badge bronze">rebate_form_flag</span><span class="badge bronze">web_security</span></div></td>
         </tr>
+        <tr>
+            <td><span class="badge gold">vw_glossary_hierarchy [GOV]</span></td>
+            <td><div class="bronze-list"><span class="badge silver">GOV.glossary_full_cleaned</span></div></td>
+            <td><span class="na">&mdash;</span></td>
+        </tr>
         <tr><td colspan="3" style="background:#1a1a2e;color:#ffd700;font-size:0.8em;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px;">copilot Schema Views &mdash; Copilot Agent Query Layer</td></tr>
         <tr>
             <td><span class="badge orange">[copilot].ME_Total_Membership</span></td>
             <td><span class="na">&mdash; (via dbo.ME_Total_Membership)</span></td>
             <td><span class="na">&mdash; (via dbo.ME_Total_Membership)</span></td>
-        </tr>
-        <tr>
-            <td><span class="badge orange">[copilot].Membership_Budget</span></td>
-            <td><span class="na">&mdash; (via dbo.Membership_Budget)</span></td>
-            <td><span class="na">&mdash; (via dbo.Membership_Budget)</span></td>
-        </tr>
-        <tr>
-            <td><span class="badge orange">[copilot].vw_ovhc</span></td>
-            <td><span class="na">&mdash; (via dbo.vw_ovhc)</span></td>
-            <td><span class="na">&mdash; (via dbo.vw_ovhc)</span></td>
         </tr>
 
 
