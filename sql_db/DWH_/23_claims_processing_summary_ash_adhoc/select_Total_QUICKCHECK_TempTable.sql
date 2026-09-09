@@ -257,11 +257,10 @@ SELECT DISTINCT *
 INTO #WithStringFields
 FROM WithStringFields;
 
+-- SELECT * FROM #WithStringFields
+
 -- ---------------------------------------------------------------------------
--- Part 2: Stage 9 onward, reading from #WithStringFields instead of
--- re-deriving it. Same logic/filters as select_Total_QUICKCHECK.sql -- only
--- `FROM WithStringFields` swapped for `FROM #WithStringFields`. Re-run just
--- this part (without Part 1) whenever iterating on Stage 9-10 logic.
+-- Part 2: below read from temptable #WithStringFields 
 -- ---------------------------------------------------------------------------
 
 WITH

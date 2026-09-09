@@ -260,11 +260,10 @@ SELECT DISTINCT *
 INTO #Claims_Final_Snapshot
 FROM Final;
 
+-- SELECT * FROM #Claims_Final_Snapshot
+
 -- ---------------------------------------------------------------------------
--- Part 2: the 11 dashboard numbers, read from #Claims_Final_Snapshot instead
--- of re-running the join chain per subquery. Same logic/filters as
--- select_Claims_QUICKCHECK.sql's final SELECT -- only `FROM Final` swapped
--- for `FROM #Claims_Final_Snapshot`.
+-- Part 2: below read from temptable #Claims_Final_Snapshot
 -- ---------------------------------------------------------------------------
 
 SELECT
