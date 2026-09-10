@@ -9,8 +9,10 @@ warehouse) to identify source tables supporting three optometry business metrics
 data), no DDL — table/object exploration and querying only, no schema changes.
 
 **Status:** `select_Script_To_Sale_Conversion.sql` is written, tested against live data, and
-iterated through 4 commits (see Git history) — draft, not yet business-approved. Chair Utilisation
-and Optometrist Utilisation are unblocked for SQL but not yet written.
+iterated through 6 commits (see Git history) — draft, not yet business-approved.
+`select_Chair_Utilisation.sql` is written and tested against live data — logic runs cleanly, but
+results are not usable yet because the denominator relies on unconfirmed placeholder parameters
+(see below). Optometrist Utilisation is unblocked for SQL but not yet started.
 
 - **Script-to-Sale Conversion**: Fact table + conversion-rate rollups built. Purchases are matched
   by **patient + date** (not `EXAM_ID` — see reliability finding below) and attributed to exactly
@@ -23,11 +25,13 @@ and Optometrist Utilisation are unblocked for SQL but not yet written.
   verified. **Still open**: side-by-side same-day/1-week/2-week window comparison (currently one
   window at a time via `@DateWindowDays`), and a Walk-In Sales summary rollup (detail rows exist,
   no aggregate yet). Not yet reviewed by business.
-- **Chair Utilisation**: `APPOINTMENT` duration/status fields and the 12-branch `BRANCH` location
-  dimension confirmed. The working-day calendar per branch is directly computable from
-  `APPOINTMENT` data — no business input needed. **Blocked on business** only for picking a single
-  value from the 12–14 appointments/day range in the "Total Available Chair Hours" formula. SQL
-  not yet written.
+- **Chair Utilisation**: `select_Chair_Utilisation.sql` written and tested (2026-09-10) — fact
+  table (`#ChairAppointmentDetail`, one row per attended appointment) + a per-branch metrics
+  rollup, same two-stage structure as Script-to-Sale. Only 5 branches (DUB/LIT/MAK/ORA/WOL) have
+  appointment activity. Test run produced Chair Utilisation of 44%–94% across branches, but **these
+  numbers are not usable** — they're entirely driven by the unconfirmed `SlotsPerDay`/
+  `MinutesPerSlot` placeholders (13, 30), not business-approved values. The numerator and
+  Working-Days calculation are solid; only the denominator parameters are open.
 - **Optometrist Utilisation**: fully ready to build. Numerator (`APPOINTMENT`, attended,
   by `USER_IDENTIFIER`), denominator (`CLOCKINOUT` in/out times), and the optometrist filter
   (`USERS.USER_TYPE=1`, excluding 7 non-person placeholder accounts) are all confirmed against
@@ -46,9 +50,10 @@ subsequently completed a purchase ÷ relevant appointments/patients.
 4 commits in. Not yet reviewed or approved by business.
 
 **How the query works (current implementation):**
-- **Attendance**: `APPOINTMENT.APP_PROGRESS=5`, excluding `IS_BREAK=1` and `PATIENTID` of `-1`/
-  `NULL` (placeholder/break rows not always caught by `IS_BREAK` — confirmed by a colleague,
-  2026-09-10).
+- **Attendance**: `APPOINTMENT.APP_PROGRESS IN (2,3,4,5,10)` (Waiting/Pre-test/Consulting/Complete/
+  Dilating — full code list confirmed by Kathryn from the Optomate front end, 2026-09-10; see
+  decode table below), excluding `IS_BREAK=1` and `PATIENTID` of `-1`/`NULL` (placeholder/break
+  rows not always caught by `IS_BREAK` — confirmed by a colleague, 2026-09-10).
 - **Script**: same-patient/same-day match to `EXAMINATION`, then `EXAMINATION.ID = SPECTACLE_RX.EXAM_ID`.
 - **Purchase linking**: patient + date, NOT `EXAM_ID` (see reliability finding below — `EXAM_ID`
   is populated for consultation billing but almost never for retail/dispensing invoices).
@@ -89,7 +94,8 @@ subsequently completed a purchase ÷ relevant appointments/patients.
 
 #### Script-to-Sale reliability finding (2026-09-09, verified against live Optomate data)
 
-Executing the draft query's logic step by step against real data showed:
+Executing the draft query's logic step by step against real data showed (this pass predates the
+later `APP_PROGRESS IN (2,3,4,5,10)` expansion — figures below use the original `=5` inference):
 
 1. `APPOINTMENT` (attended, `APP_PROGRESS=5`) → `EXAMINATION` via same-patient/same-day match:
    reliable, 96.6% match rate (2,848 / 2,947).
@@ -111,23 +117,76 @@ Executing the draft query's logic step by step against real data showed:
 
 **Definition:** Total Attended Appointment Duration (hours) ÷ Total Available Chair Hours.
 
-**Total Available Chair Hours derivation:**
-Number of working days (excluding days with no appointments, e.g. public holidays)
-× 12–14 appointments per day × 5 days per week, **per location** (requires a location split
-filter).
+**Total Available Chair Hours derivation, per branch:**
 
-**Data status:** numerator (attended appointment duration) and the location dimension (12
-branches) are fully confirmed — see Source Table Mapping below. The denominator formula itself is
-given in the metric definition and is mostly computable directly from data:
-- "Number of working days excluding days with no appointments" — derivable directly from
-  `APPOINTMENT` (count distinct dates per branch with at least one attended appointment).
-- "5 days per week" — fixed in the definition, not a variable.
-- "12–14 appointments per day" — the **only** open parameter; it's a range, not a single value.
+```
+Working Days × SlotsPerDay × MinutesPerSlot / 60
+```
+
+- **Working Days** — computed from data, not assumed: `COUNT(DISTINCT CAST(STARTDATE AS DATE))` in
+  `APPOINTMENT`, per branch. This already excludes days with zero appointments (e.g. public
+  holidays), matching the definition's wording exactly. The original definition's "× 5 days per
+  week" is **not** applied as a separate multiplier — it was the assumption behind how "working
+  days" would come out, not an independent factor; multiplying by it again would double-count the
+  week-length dimension that's already implicit in the working-day count.
+- **SlotsPerDay** and **MinutesPerSlot** — both open business parameters (the 12–14/day range
+  doesn't specify a single number, and there's no standard-slot-length field anywhere in the
+  schema). Both are placeholders, one row per branch, in a `@SlotConfig` table variable — not
+  global constants — because there's no reason to assume every branch runs the same appointment
+  density or the same slot length:
+
+  ```sql
+  DECLARE @SlotConfig TABLE (BranchIdentifier VARCHAR(10), SlotsPerDay INT, MinutesPerSlot INT);
+  INSERT INTO @SlotConfig VALUES
+      ('DUB', 13, 30),
+      ('LIT', 13, 30),
+      ('MAK', 13, 30),
+      ('ORA', 13, 30),
+      ('WOL', 13, 30);
+  ```
+
+  (13 = midpoint of the 12–14 range, 30 min = placeholder slot length — both to be replaced
+  per-branch once business confirms.)
+
+**Data status:** numerator (attended appointment duration) and the location dimension are fully
+confirmed — see Source Table Mapping below. Working Days is fully data-derivable; SlotsPerDay and
+MinutesPerSlot remain open business parameters, placeholder for now.
+
+**Numerator verified (2026-09-10):** `APPOINTMENT.DURATION` (minutes) matches
+`DATEDIFF(MINUTE, STARTDATE, ENDDATE)` exactly for every attended row — 0 mismatches across all
+appointments with `APP_PROGRESS IN (2,3,4,5,10)` and `IS_BREAK=0`. `DURATION` can be summed
+directly (÷60 for hours) without recomputing from the two datetime columns.
+
+**Branches confirmed active in `APPOINTMENT` data (2026-09-10):** only 5 of the 12 `BRANCH` rows
+have appointment activity — DUB, LIT, MAK, ORA, WOL (date ranges span 2026-02-23 through
+2027-12-31, i.e. `APPOINTMENT` includes future/already-scheduled rows, not just historical ones —
+relevant if a fixed reporting date range is added later; the numerator is unaffected since
+"attended" statuses can't exist for future dates).
+
+**SQL status:** `select_Chair_Utilisation.sql` written and tested (2026-09-10), 2,933 attended-
+appointment rows in the fact table, all 5 active branches present with plausible per-appointment
+durations (30/45/60 min). Structure mirrors Script-to-Sale: `#ChairAppointmentDetail` (fact table,
+one row per attended appointment — numerator fields only) → `@SlotConfig` (denominator
+placeholders) → a per-branch metrics rollup query. Test-run results (all using the 13/30
+placeholders — **not usable as real figures**):
+
+| Branch | Working Days | Attended Hours | Available Hours (placeholder) | Chair Utilisation |
+|---|---|---|---|---|
+| DUB | 82 | 499.4 | 533.0 | 93.7% |
+| LIT | 130 | 678.0 | 845.0 | 80.2% |
+| MAK | 114 | 635.0 | 741.0 | 85.7% |
+| ORA | 80 | 377.5 | 520.0 | 72.6% |
+| WOL | 22 | 63.25 | 143.0 | 44.2% |
 
 **Open items:**
-- Need business to pick a single value (or confirm a per-branch value) within the 12–14
-  appointments/day range used in the Total Available Chair Hours formula. Everything else in the
-  formula can be computed from data already confirmed.
+- Business to confirm/replace `SlotsPerDay` and `MinutesPerSlot` per branch in `@SlotConfig` — this
+  is the only remaining blocker; once real values are in, the query needs no other changes.
+- WOL has only 22 working days in the data so far — much thinner sample than the other 4 branches;
+  its utilisation figure will be noisier and less comparable until more data accumulates.
+- Numerator and denominator should share the same date-range filter once one is added (mirrors
+  `@DateWindowDays` in the Script-to-Sale query) — not yet built. Not currently a correctness issue
+  (attended statuses can't exist on the future-dated rows in `APPOINTMENT`), just a gap if a fixed
+  reporting period is wanted later.
 
 ### 3. Optometrist Utilisation
 
@@ -222,7 +281,9 @@ Git history for the commit that replaced it with the `ITEMCATEGORY` rule above).
 
 1. ~~List all schemas/tables in Optomate~~ — done (dbo schema, ~280 tables).
 2. ~~Inspect appointment table structure~~ — done. ~~Decode `APPOINTMENT.APP_PROGRESS`~~ — done,
-   `APP_PROGRESS = 5` = Attended (inferred via same-day invoice cross-tab, see table above).
+   `APP_PROGRESS IN (2,3,4,5,10)` = Attended (data-inferred `=5` guess confirmed correct by
+   Kathryn, then expanded to include 2/3/4/10 per the full front-end-sourced code list — see
+   decode table above).
 3. ~~Verify the `EXAMINATION.ID` = `SPECTACLE_RX.EXAM_ID` = `INVOICE.EXAM_ID` join hypothesis~~ —
    done, confirmed against real data. **New finding:** an invoice exists for almost every
    completed exam (consultation fee), so "completed a purchase" must be determined from
@@ -235,13 +296,16 @@ Git history for the commit that replaced it with the `ITEMCATEGORY` rule above).
    5 = genuine sales (include); TYPE 6 = return/credit note (exclude) — see decode table above.
 6. ~~Confirm which `USERS.USER_TYPE` value(s) identify optometrists~~ — done, `USER_TYPE = 1`
    confirmed via appointment cross-tab (see table above).
-7. ~~Confirm location dimension/grain for Chair Utilisation split~~ — done, 12 branches confirmed
-   (see table above); use `BRANCH.IDENTIFIER` as the split key.
-8. ~~Confirm working-day calendar and 12–14 appointments/day assumption~~ — partially done.
-   Working-day calendar is directly computable from `APPOINTMENT` data (distinct dates with an
-   attended appointment, per branch) — no business input needed. Remaining: business must pick a
-   single value (or per-branch value) from the 12–14 appointments/day range; this is a business
-   parameter choice, not something derivable from data.
+7. ~~Confirm location dimension/grain for Chair Utilisation split~~ — done. Use
+   `APPOINTMENT.BRANCH_IDENTIFIER` as the split key; only 5 of 12 `BRANCH` rows
+   (DUB/LIT/MAK/ORA/WOL) actually have appointment activity.
+8. ~~Confirm working-day calendar and 12–14 appointments/day assumption~~ — done. Working-day
+   calendar = `COUNT(DISTINCT CAST(STARTDATE AS DATE))` per branch, fully data-derivable, no
+   business input needed; the definition's "× 5 days/week" is not applied as a separate multiplier
+   (it describes the assumption behind working-day counts, not an independent factor — applying it
+   again would double-count). `SlotsPerDay` and `MinutesPerSlot` remain open, per-branch business
+   parameters — see `@SlotConfig` in the Chair Utilisation section above; placeholders in use
+   (13/day, 30 min/slot) until business confirms real values.
 9. ~~Script-to-Sale purchase linkage via `INVOICE.EXAM_ID` is unreliable~~ — **resolved by
    business (Kathryn, 2026-09-10)**: use patient + date matching instead, confirmed as the
    expected, realistic approach. Implemented with an attribution rule to avoid double-counting
@@ -259,6 +323,6 @@ Git history for the commit that replaced it with the `ITEMCATEGORY` rule above).
 
 | Metric | Data exploration | SQL status | Remaining work |
 |---|---|---|---|
-| Script-to-Sale Conversion | Complete | **Written and tested** (`select_Script_To_Sale_Conversion.sql`, 4 commits) | Add Walk-In Sales summary rollup; add side-by-side date-window comparison; get business sign-off on the finished query/results |
-| Chair Utilisation | Complete | Not started | Business: pick one value from the 12–14 appointments/day range (can use a placeholder, e.g. 13, in the meantime) |
+| Script-to-Sale Conversion | Complete | **Written and tested** (`select_Script_To_Sale_Conversion.sql`, 6 commits) | Add Walk-In Sales summary rollup; add side-by-side date-window comparison; get business sign-off on the finished query/results |
+| Chair Utilisation | Complete | **Written and tested** (`select_Chair_Utilisation.sql`) — logic verified, results not usable until denominator is confirmed | Business: confirm `SlotsPerDay`/`MinutesPerSlot` per branch (placeholders 13/30 in use meanwhile) |
 | Optometrist Utilisation | Complete | Not started | None — ready to write with no placeholders needed |
