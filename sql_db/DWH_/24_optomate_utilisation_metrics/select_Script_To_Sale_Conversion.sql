@@ -1,9 +1,14 @@
 /*
  Script-to-Sale Conversion — FACT TABLE (draft, not business-approved)
- Grain: visit x every invoice on/after the visit date, no window cutoff —
- filter WHERE DaysAfterAppointment BETWEEN 0 AND DateWindowDays downstream.
- Do not COUNT(*)/SUM(Converted) here: an invoice can match 2+ visits for the
- same patient (attribution rule not yet business-confirmed — see DESIGN.md).
+ Grain: visit x purchase, with each invoice attributed to exactly ONE visit —
+ the most recent attended visit for that patient on or before the sale date
+ (no upper bound; filter WHERE DaysAfterAppointment BETWEEN 0 AND
+ DateWindowDays downstream if a window is needed). This avoids the same
+ invoice being double-counted across a patient's multiple visits.
+ A visit with no attributed purchase still appears once (purchase columns
+ NULL). A purchase that predates a patient's first attended visit (or whose
+ patient has none) appears with visit columns NULL — this is a "Walk-In
+ Sale" candidate, not a data error.
  Purchase matched by PATIENT + DATE, not EXAM_ID (unreliable — see DESIGN.md).
  Exclusion (Kathryn, 2026-09-10): a line is excluded if its ITEMCATEGORY has
  IS_CONSULTATION=1 or IDENTIFIER IN ('REPR','WOFF','~ACC'), resolved via
@@ -62,11 +67,74 @@ VisitBase AS (
     WHERE (@ScriptFilter = 'ALL')
        OR (@ScriptFilter = 'WITH_SCRIPT' AND HasScript = 1)
        OR (@ScriptFilter = 'NO_SCRIPT'   AND HasScript = 0)
+),
+-- Every genuine-sale invoice line that survives the exclusion rule (Kathryn,
+-- 2026-09-10: ITEMCATEGORY.IS_CONSULTATION=1 or IDENTIFIER IN REPR/WOFF/~ACC).
+QualifyingPurchaseLines AS (
+    SELECT
+        i.ID                AS InvoiceID,
+        i.PATIENTID         AS PatientID,
+        i.TYPE              AS InvoiceType,
+        i.SALE_DATE         AS PurchaseDate,
+        ii.ID               AS InvoiceItemID,
+        ii.STOCK_TYPE,
+        ii.DESCRIPTION      AS ProductName,
+        ii.QTY,
+        ii.UNITPRICE,
+        ii.DISCOUNT_AMOUNT,
+        ii.EXTENDED         AS LineAmount,
+        cat.IDENTIFIER      AS ItemCategoryIdentifier,
+        cat.NAME            AS ItemCategoryName
+    FROM INVOICE i
+    JOIN INVOICE_ITEMS ii
+        ON ii.INVOICEID = i.ID
+       AND (ii.CHARGETO IS NULL OR ii.CHARGETO COLLATE DATABASE_DEFAULT <> 'MEDICARE')  -- business-confirmed exclusion (Kathryn)
+       AND ii.STOCK_TYPE IN (2, 3, 4, 5, 7, 8, 9)   -- retail product lines (STOCK_TYPE=1 consultation fee always excluded)
+       AND NOT EXISTS (
+            SELECT 1
+            FROM ITEMS itm
+            JOIN ITEMCATEGORY cat2 ON cat2.IDENTIFIER = itm.CATEGORY_IDENTIFIER
+            WHERE itm.ID = ii.STOCK_ID
+              AND (cat2.IS_CONSULTATION = 1 OR cat2.IDENTIFIER IN ('REPR', 'WOFF', '~ACC'))
+       )
+    LEFT JOIN ITEMS itm2 ON itm2.ID = ii.STOCK_ID
+    LEFT JOIN ITEMCATEGORY cat ON cat.IDENTIFIER = itm2.CATEGORY_IDENTIFIER
+    WHERE i.TYPE IN (1, 2, 5)                        -- genuine sale invoice types (exclude TYPE 6 returns)
+),
+-- Attribute each purchase line to exactly ONE visit: the most recent attended
+-- visit for that patient on or before the purchase date (no earlier cap).
+-- A purchase with no such visit (predates the patient's first attended visit,
+-- or the patient has none) gets NULL visit columns — a Walk-In Sale candidate.
+AttributedPurchases AS (
+    SELECT
+        qpl.*,
+        va.AppointmentID,
+        va.PatientID        AS VisitPatientID,
+        va.BranchIdentifier,
+        va.OptometristIdentifier,
+        va.AppointmentDate,
+        va.ExamID,
+        va.HasScript
+    FROM QualifyingPurchaseLines qpl
+    OUTER APPLY (
+        -- Priority 1: most recent visit ON OR BEFORE the purchase date that HAS a
+        -- script. Priority 2 (only if no priority-1 visit exists for this patient):
+        -- most recent visit on or before the purchase date, script or not.
+        -- "On or before the purchase date" is the non-negotiable precondition in
+        -- both tiers — a later visit can never claim an earlier purchase.
+        SELECT TOP 1 vb.*
+        FROM VisitBase vb
+        WHERE vb.PatientID = qpl.PatientID
+          AND CAST(vb.AppointmentDate AS DATE) <= CAST(qpl.PurchaseDate AS DATE)
+        ORDER BY
+            CASE WHEN vb.HasScript = 1 THEN 0 ELSE 1 END,  -- scripted visits ranked first
+            vb.AppointmentDate DESC
+    ) va
 )
 
--- Fact table: one row per attended visit x matched purchase line (business-confirmed
--- PATIENT + DATE WINDOW rule, not EXAM_ID — see header). A visit with no matching
--- purchase within the window still appears once, with all purchase columns NULL.
+-- Fact table: one row per attended visit x attributed purchase line, PLUS one
+-- row per visit with no attributed purchase (purchase columns NULL), PLUS one
+-- row per unattributed purchase / Walk-In Sale candidate (visit columns NULL).
 SELECT
     vb.AppointmentID,
     vb.PatientID,
@@ -75,15 +143,14 @@ SELECT
     vb.AppointmentDate,
     vb.ExamID,
     vb.HasScript,
-    @ScriptFilter                                AS ScriptFilter,
-    @DateWindowDays                              AS DateWindowDays,  -- reference value only, not applied as a filter — see header
-    i.ID                                          AS InvoiceID,
-    i.TYPE                                        AS InvoiceType,
-    i.SALE_DATE                                   AS PurchaseDate,
-    DATEDIFF(DAY, vb.AppointmentDate, i.SALE_DATE) AS DaysAfterAppointment,
-    ii.ID                                          AS InvoiceItemID,
-    ii.STOCK_TYPE,
-    CASE ii.STOCK_TYPE
+    @ScriptFilter                                  AS ScriptFilter,
+    ap.InvoiceID,
+    ap.InvoiceType,
+    ap.PurchaseDate,
+    DATEDIFF(DAY, vb.AppointmentDate, ap.PurchaseDate) AS DaysAfterAppointment,
+    ap.InvoiceItemID,
+    ap.STOCK_TYPE,
+    CASE ap.STOCK_TYPE
         WHEN 2 THEN 'Spectacle Frame'
         WHEN 3 THEN 'Sunglasses Frame'
         WHEN 4 THEN 'Spectacle Lens'
@@ -92,41 +159,78 @@ SELECT
         WHEN 8 THEN 'Lens Coating'
         WHEN 9 THEN 'Lens Tint'
         ELSE NULL
-    END                                            AS StockTypeCategory,
-    cat.IDENTIFIER                                 AS ItemCategoryIdentifier,
-    cat.NAME                                       AS ItemCategoryName,
-    ii.DESCRIPTION                                 AS ProductName,
-    ii.QTY,
-    ii.UNITPRICE,
-    ii.DISCOUNT_AMOUNT,
-    ii.EXTENDED                                    AS LineAmount,
-    CASE WHEN ii.ID IS NOT NULL THEN 1 ELSE 0 END  AS IsPurchaseLine,
-    CASE WHEN vb.HasScript = 1 AND ii.ID IS NOT NULL THEN 1 ELSE 0 END AS Converted
+    END                                              AS StockTypeCategory,
+    ap.ItemCategoryIdentifier,
+    ap.ItemCategoryName,
+    ap.ProductName,
+    ap.QTY,
+    ap.UNITPRICE,
+    ap.DISCOUNT_AMOUNT,
+    ap.LineAmount,
+    CASE WHEN ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS IsPurchaseLine,
+    CASE WHEN vb.HasScript = 1 AND ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS Converted
 INTO #PurchaseDetail
-FROM VisitBase vb
-LEFT JOIN INVOICE i
-    ON i.PATIENTID = vb.PatientID
-   AND CAST(i.SALE_DATE AS DATE) >= CAST(vb.AppointmentDate AS DATE)  -- no upper bound: apply a window downstream
-   AND i.TYPE IN (1, 2, 5)                         -- genuine sale invoice types (exclude TYPE 6 returns)
-LEFT JOIN INVOICE_ITEMS ii
-    ON ii.INVOICEID = i.ID
-   AND (ii.CHARGETO IS NULL OR ii.CHARGETO COLLATE DATABASE_DEFAULT <> 'MEDICARE')  -- business-confirmed exclusion (Kathryn)
-   AND ii.STOCK_TYPE IN (2, 3, 4, 5, 7, 8, 9)       -- retail product lines (STOCK_TYPE=1 consultation fee always excluded)
-   -- Resolve item category (see header for the join path and its coverage limits).
-   -- No category match => treated as NOT excluded (verified safe, see header).
-   AND NOT EXISTS (
-        SELECT 1
-        FROM ITEMS itm
-        JOIN ITEMCATEGORY cat2 ON cat2.IDENTIFIER = itm.CATEGORY_IDENTIFIER
-        WHERE itm.ID = ii.STOCK_ID
-          AND (cat2.IS_CONSULTATION = 1 OR cat2.IDENTIFIER IN ('REPR', 'WOFF', '~ACC'))
-   )
-LEFT JOIN ITEMS itm2 ON itm2.ID = ii.STOCK_ID
-LEFT JOIN ITEMCATEGORY cat ON cat.IDENTIFIER = itm2.CATEGORY_IDENTIFIER;
+FROM AttributedPurchases ap
+FULL OUTER JOIN VisitBase vb
+    ON vb.AppointmentID = ap.AppointmentID;
 
 -- Output the fact table.
 SELECT *
 FROM #PurchaseDetail
 ORDER BY AppointmentDate DESC, AppointmentID, PurchaseDate;
 
+-- ============================================================================
+-- METRICS — rolled up from #PurchaseDetail, one row per AppointmentID first
+-- (a visit can appear on multiple rows above if it matched several purchased
+-- items, so roll up before counting or the visit/conversion counts will be
+-- inflated). Walk-In Sale candidates (AppointmentID IS NULL) are excluded
+-- from all three queries below, since they aren't attributed to any visit.
+-- Converted here respects @DateWindowDays: a visit only counts as converted
+-- if its attributed purchase fell within that many days of the visit
+-- (DaysAfterAppointment BETWEEN 0 AND @DateWindowDays). Change @DateWindowDays
+-- at the top of this script and re-run to see the rate for a different window.
+-- ============================================================================
+IF OBJECT_ID('tempdb..#VisitRollup') IS NOT NULL DROP TABLE #VisitRollup;
+
+SELECT
+    AppointmentID,
+    BranchIdentifier,
+    MAX(HasScript) AS HasScript,   -- same for every row of a given AppointmentID
+    MAX(CASE WHEN Converted = 1
+             AND DaysAfterAppointment BETWEEN 0 AND @DateWindowDays
+             THEN 1 ELSE 0 END)   AS Converted
+INTO #VisitRollup
+FROM #PurchaseDetail
+WHERE AppointmentID IS NOT NULL
+GROUP BY AppointmentID, BranchIdentifier;
+
+-- 1) Overall conversion rate.
+SELECT
+    COUNT(*)                                             AS Total_Attended_Visits,
+    SUM(HasScript)                                        AS Visits_With_Script,
+    SUM(Converted)                                        AS Converted_Visits,
+    CAST(SUM(Converted) AS FLOAT) / NULLIF(COUNT(*), 0)   AS Conversion_Rate
+FROM #VisitRollup;
+
+-- 2) With-script vs. without-script comparison.
+SELECT
+    CASE WHEN HasScript = 1 THEN 'With Script' ELSE 'No Script' END AS ScriptStatus,
+    COUNT(*)                                             AS Total_Visits,
+    SUM(Converted)                                        AS Converted_Visits,
+    CAST(SUM(Converted) AS FLOAT) / NULLIF(COUNT(*), 0)   AS Conversion_Rate
+FROM #VisitRollup
+GROUP BY CASE WHEN HasScript = 1 THEN 'With Script' ELSE 'No Script' END;
+
+-- 3) By branch (location).
+SELECT
+    BranchIdentifier,
+    COUNT(*)                                             AS Total_Attended_Visits,
+    SUM(HasScript)                                        AS Visits_With_Script,
+    SUM(Converted)                                        AS Converted_Visits,
+    CAST(SUM(Converted) AS FLOAT) / NULLIF(COUNT(*), 0)   AS Conversion_Rate
+FROM #VisitRollup
+GROUP BY BranchIdentifier
+ORDER BY BranchIdentifier;
+
 DROP TABLE #PurchaseDetail;
+DROP TABLE #VisitRollup;
