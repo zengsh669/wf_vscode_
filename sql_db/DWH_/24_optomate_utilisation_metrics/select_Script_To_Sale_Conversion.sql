@@ -1,22 +1,14 @@
 /*
  Script-to-Sale Conversion — FACT TABLE (draft, not business-approved)
- Grain: one row per visit x every INVOICE that patient has ON OR AFTER the visit
- date (unmatched visit = 1 row, NULLs). This is a deliberate cross join of a
- patient's visits x their invoices — NO date-window cutoff is applied here.
- DaysAfterAppointment tells you how many days after the visit each invoice
- landed. @DateWindowDays is declared below but NOT used to filter this fact
- table — it's carried through as a column so a downstream query/pivot can
- filter WHERE DaysAfterAppointment BETWEEN 0 AND DateWindowDays without
- needing to know the value separately or re-run this script with a different
- constant.
- Do not COUNT(*) or naively SUM(Converted) here for a conversion rate — a
- patient with 2 visits can have the same invoice match both (see DESIGN.md /
- conversation history: this needs a business-confirmed rule for which visit
- an invoice should be attributed to before a rollup is calculated).
+ Grain: visit x every invoice on/after the visit date, no window cutoff —
+ filter WHERE DaysAfterAppointment BETWEEN 0 AND DateWindowDays downstream.
+ Do not COUNT(*)/SUM(Converted) here: an invoice can match 2+ visits for the
+ same patient (attribution rule not yet business-confirmed — see DESIGN.md).
  Purchase matched by PATIENT + DATE, not EXAM_ID (unreliable — see DESIGN.md).
- @ScriptFilter below controls which visits (by script status) are included.
- STOCK_TYPE=7 exclusion list is a tentative placeholder pending business sign-off.
- Full rules, evidence and decode tables: DESIGN.md.
+ Exclusion (Kathryn, 2026-09-10): a line is excluded if its ITEMCATEGORY has
+ IS_CONSULTATION=1 or IDENTIFIER IN ('REPR','WOFF','~ACC'), resolved via
+ STOCK_ID -> ITEMS -> ITEMCATEGORY (~52% coverage, verified safe — see DESIGN.md).
+ Full rules and evidence: DESIGN.md.
 */
 
 -- ============================================================================
@@ -26,32 +18,6 @@
 -- ============================================================================
 DECLARE @DateWindowDays INT = 14;           -- 0 = same day, 7 = 1 week, 14 = 2 weeks
 DECLARE @ScriptFilter   VARCHAR(20) = 'ALL';  -- 'ALL' | 'WITH_SCRIPT' | 'NO_SCRIPT'
-
--- PLACEHOLDER: tentative STOCK_TYPE = 7 exclusion list — pending business confirmation.
--- Rows marked "likely exclude" in DESIGN.md's STOCK_TYPE=7 breakdown are included here.
--- Business may add/remove descriptions (e.g. dry-eye care products currently marked TBC).
-IF OBJECT_ID('tempdb..#exclude_descriptions') IS NOT NULL DROP TABLE #exclude_descriptions;
-CREATE TABLE #exclude_descriptions (DESCRIPTION NVARCHAR(200));
-INSERT INTO #exclude_descriptions (DESCRIPTION) VALUES
-    ('Eye Health Checks (inc. OCT, CT, RP &/or ODC)'),   -- exam-like, not retail
-    ('Xailin Eye Drops 10mL'),                            -- drops
-    ('Optimed Xailin Gel'),                               -- drops/gel
-    ('Rohto Dry Eye Aid Drops'),                          -- drops
-    ('Xailin Gel 10g tube'),                              -- drops/gel
-    ('Manuka Eye Drops - 10ml'),                          -- drops
-    ('Xailin Hydrate (10mL)'),                            -- drops
-    ('Optimed Xailin Night'),                             -- drops/ointment
-    ('Optimed Xailin Hydrate'),                           -- drops
-    ('Xailin Gel (10g)'),                                 -- drops/gel
-    ('Celluvisc Unit Dose (30 x 0.4ml)'),                 -- drops
-    ('Write Off Non-Taxable Items'),                      -- financial adjustment
-    ('Write Off Taxable Items'),                          -- financial adjustment
-    ('Opening Balance (From NetOptic)');                  -- financial adjustment
--- NOT included above (tentatively treated as a genuine purchase/service — TBC with business):
---   Own Frame Fitting Fee, Own Frame, Replacement Part/Repair to Frame, Standard/Express Freight,
---   Optimed Blephadex* / Manuka* / Bruder* / D.E.R.M / Zocular / Avenova dry-eye care products,
---   Zeiss Lens Cleaning Wipes, Nylon Cord, General Accessory Item, Pocket Case, Nose Pads, etc.
---   See DESIGN.md for the full 41-row breakdown with tentative categories.
 
 IF OBJECT_ID('tempdb..#PurchaseDetail') IS NOT NULL DROP TABLE #PurchaseDetail;
 
@@ -127,6 +93,8 @@ SELECT
         WHEN 9 THEN 'Lens Tint'
         ELSE NULL
     END                                            AS StockTypeCategory,
+    cat.IDENTIFIER                                 AS ItemCategoryIdentifier,
+    cat.NAME                                       AS ItemCategoryName,
     ii.DESCRIPTION                                 AS ProductName,
     ii.QTY,
     ii.UNITPRICE,
@@ -143,17 +111,22 @@ LEFT JOIN INVOICE i
 LEFT JOIN INVOICE_ITEMS ii
     ON ii.INVOICEID = i.ID
    AND (ii.CHARGETO IS NULL OR ii.CHARGETO COLLATE DATABASE_DEFAULT <> 'MEDICARE')  -- business-confirmed exclusion (Kathryn)
-   AND (
-         ii.STOCK_TYPE IN (2, 3, 4, 5, 8, 9)        -- unambiguous retail product lines
-         OR (ii.STOCK_TYPE = 7
-             AND ii.DESCRIPTION COLLATE DATABASE_DEFAULT NOT IN
-                 (SELECT DESCRIPTION COLLATE DATABASE_DEFAULT FROM #exclude_descriptions))
-       );
+   AND ii.STOCK_TYPE IN (2, 3, 4, 5, 7, 8, 9)       -- retail product lines (STOCK_TYPE=1 consultation fee always excluded)
+   -- Resolve item category (see header for the join path and its coverage limits).
+   -- No category match => treated as NOT excluded (verified safe, see header).
+   AND NOT EXISTS (
+        SELECT 1
+        FROM ITEMS itm
+        JOIN ITEMCATEGORY cat2 ON cat2.IDENTIFIER = itm.CATEGORY_IDENTIFIER
+        WHERE itm.ID = ii.STOCK_ID
+          AND (cat2.IS_CONSULTATION = 1 OR cat2.IDENTIFIER IN ('REPR', 'WOFF', '~ACC'))
+   )
+LEFT JOIN ITEMS itm2 ON itm2.ID = ii.STOCK_ID
+LEFT JOIN ITEMCATEGORY cat ON cat.IDENTIFIER = itm2.CATEGORY_IDENTIFIER;
 
 -- Output the fact table.
 SELECT *
 FROM #PurchaseDetail
 ORDER BY AppointmentDate DESC, AppointmentID, PurchaseDate;
 
-DROP TABLE #exclude_descriptions;
 DROP TABLE #PurchaseDetail;
