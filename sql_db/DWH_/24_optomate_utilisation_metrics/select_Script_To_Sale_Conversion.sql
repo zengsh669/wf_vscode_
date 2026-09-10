@@ -1,25 +1,21 @@
 /*
  Script-to-Sale Conversion — FACT TABLE (draft, not business-approved)
- Grain: visit x purchase, with each invoice attributed to exactly ONE visit —
- the most recent attended visit for that patient on or before the sale date
- (no upper bound; filter WHERE DaysAfterAppointment BETWEEN 0 AND
- DateWindowDays downstream if a window is needed). This avoids the same
- invoice being double-counted across a patient's multiple visits.
- A visit with no attributed purchase still appears once (purchase columns
- NULL). A purchase that predates a patient's first attended visit (or whose
- patient has none) appears with visit columns NULL — this is a "Walk-In
- Sale" candidate, not a data error.
- Purchase matched by PATIENT + DATE, not EXAM_ID (unreliable — see DESIGN.md).
- Exclusion (Kathryn, 2026-09-10): a line is excluded if its ITEMCATEGORY has
- IS_CONSULTATION=1 or IDENTIFIER IN ('REPR','WOFF','~ACC'), resolved via
- STOCK_ID -> ITEMS -> ITEMCATEGORY (~52% coverage, verified safe — see DESIGN.md).
+ Grain: visit x purchase, each invoice attributed to exactly ONE visit (most
+ recent attended visit on/before the sale date) to avoid double-counting.
+ A visit with no purchase, or a purchase with no prior visit ("Walk-In Sale"
+ candidate), still appears with the other side NULL.
+ Attended = APP_PROGRESS IN (2,3,4,5,10); purchase matched by patient+date,
+ not EXAM_ID; excluded if ITEMCATEGORY.IS_CONSULTATION=1 or IDENTIFIER IN
+ ('REPR','WOFF','~ACC') — all business-confirmed (Kathryn, 2026-09-10).
  Full rules and evidence: DESIGN.md.
 */
 
 -- ============================================================================
 -- VARIABLES — change these to switch views without editing the query body.
--- @DateWindowDays is not applied as a filter here (see note above) — it's
--- carried through as a column for use in a downstream conversion-rate query.
+-- @ScriptFilter affects the fact table itself (filters which visits appear).
+-- @DateWindowDays affects nothing until the METRICS section further down —
+-- the fact table always carries every purchase regardless of how many days
+-- after the visit it happened (see DaysAfterAppointment).
 -- ============================================================================
 DECLARE @DateWindowDays INT = 14;           -- 0 = same day, 7 = 1 week, 14 = 2 weeks
 DECLARE @ScriptFilter   VARCHAR(20) = 'ALL';  -- 'ALL' | 'WITH_SCRIPT' | 'NO_SCRIPT'
@@ -35,7 +31,10 @@ WITH AttendedAppointments AS (
         a.USER_IDENTIFIER   AS OptometristIdentifier,
         a.STARTDATE         AS AppointmentDate
     FROM APPOINTMENT a
-    WHERE a.APP_PROGRESS = 5          -- Attended (inferred, see header)
+    WHERE a.APP_PROGRESS IN (2, 3, 4, 5, 10)  -- Attended: Waiting/Pre-test/Consulting/Complete/
+                                       -- Dilating (Kathryn, 2026-09-10 — confirmed via Optomate
+                                       -- front end; 5=Complete alone under-counts patients whose
+                                       -- status was never updated to Complete after arriving)
       AND a.IS_BREAK = 0              -- exclude break/blocked-out calendar entries
       AND a.PATIENTID > 0             -- exclude PATIENTID = -1/NULL (break/placeholder rows not
                                        -- fully caught by IS_BREAK — confirmed by colleague, 2026-09-10)
