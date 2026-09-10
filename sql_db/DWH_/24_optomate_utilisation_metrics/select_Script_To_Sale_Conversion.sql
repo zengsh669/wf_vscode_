@@ -37,6 +37,8 @@ WITH AttendedAppointments AS (
     FROM APPOINTMENT a
     WHERE a.APP_PROGRESS = 5          -- Attended (inferred, see header)
       AND a.IS_BREAK = 0              -- exclude break/blocked-out calendar entries
+      AND a.PATIENTID > 0             -- exclude PATIENTID = -1/NULL (break/placeholder rows not
+                                       -- fully caught by IS_BREAK — confirmed by colleague, 2026-09-10)
 ),
 ExamForAppointment AS (
     -- Match each attended appointment to its exam on the same day for the same patient.
