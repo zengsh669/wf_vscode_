@@ -6,7 +6,7 @@
  candidate), still appears with the other side NULL.
  Attended = APP_PROGRESS IN (2,3,4,5,10); purchase matched by patient+date,
  not EXAM_ID; excluded if ITEMCATEGORY.IS_CONSULTATION=1 or IDENTIFIER IN
- ('REPR','WOFF','~ACC') — all business-confirmed (Kathryn, 2026-09-10).
+ ('REPR','WOFF','~ACC') — all business-confirmed (2026-09-10).
  Full rules and evidence: DESIGN.md.
 */
 
@@ -32,7 +32,7 @@ WITH AttendedAppointments AS (
         a.STARTDATE         AS AppointmentDate
     FROM APPOINTMENT a
     WHERE a.APP_PROGRESS IN (2, 3, 4, 5, 10)  -- Attended: Waiting/Pre-test/Consulting/Complete/
-                                       -- Dilating (Kathryn, 2026-09-10 — confirmed via Optomate
+                                       -- Dilating (business-confirmed, 2026-09-10 — via Optomate
                                        -- front end; 5=Complete alone under-counts patients whose
                                        -- status was never updated to Complete after arriving)
       AND a.IS_BREAK = 0              -- exclude break/blocked-out calendar entries
@@ -61,7 +61,7 @@ ScriptFlag AS (
         CASE WHEN sr.ID IS NOT NULL OR cr.ID IS NOT NULL THEN 1 ELSE 0 END AS HasScript
     FROM ExamForAppointment efa
     LEFT JOIN SPECTACLE_RX sr ON sr.EXAM_ID = efa.ExamID
-    LEFT JOIN CONTACT_RX   cr ON cr.EXAM_ID = efa.ExamID  -- contact lens scripts count too (Kathryn, 2026-09-11)
+    LEFT JOIN CONTACT_RX   cr ON cr.EXAM_ID = efa.ExamID  -- contact lens scripts count too (business-confirmed, 2026-09-11)
 ),
 VisitBase AS (
     SELECT *
@@ -70,7 +70,7 @@ VisitBase AS (
        OR (@ScriptFilter = 'WITH_SCRIPT' AND HasScript = 1)
        OR (@ScriptFilter = 'NO_SCRIPT'   AND HasScript = 0)
 ),
--- Every genuine-sale invoice line that survives the exclusion rule (Kathryn,
+-- Every genuine-sale invoice line that survives the exclusion rule (business,
 -- 2026-09-10: ITEMCATEGORY.IS_CONSULTATION=1 or IDENTIFIER IN REPR/WOFF/~ACC).
 QualifyingPurchaseLines AS (
     SELECT
@@ -90,7 +90,7 @@ QualifyingPurchaseLines AS (
     FROM INVOICE i
     JOIN INVOICE_ITEMS ii
         ON ii.INVOICEID = i.ID
-       AND (ii.CHARGETO IS NULL OR ii.CHARGETO COLLATE DATABASE_DEFAULT <> 'MEDICARE')  -- business-confirmed exclusion (Kathryn)
+       AND (ii.CHARGETO IS NULL OR ii.CHARGETO COLLATE DATABASE_DEFAULT <> 'MEDICARE')  -- business-confirmed exclusion
        AND ii.STOCK_TYPE IN (2, 3, 4, 5, 7, 8, 9)   -- retail product lines (STOCK_TYPE=1 consultation fee always excluded)
        AND NOT EXISTS (
             SELECT 1
