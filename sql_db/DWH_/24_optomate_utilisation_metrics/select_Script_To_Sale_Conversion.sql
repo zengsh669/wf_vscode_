@@ -58,9 +58,10 @@ ExamForAppointment AS (
 ScriptFlag AS (
     SELECT
         efa.*,
-        CASE WHEN sr.ID IS NOT NULL THEN 1 ELSE 0 END AS HasScript
+        CASE WHEN sr.ID IS NOT NULL OR cr.ID IS NOT NULL THEN 1 ELSE 0 END AS HasScript
     FROM ExamForAppointment efa
     LEFT JOIN SPECTACLE_RX sr ON sr.EXAM_ID = efa.ExamID
+    LEFT JOIN CONTACT_RX   cr ON cr.EXAM_ID = efa.ExamID  -- contact lens scripts count too (Kathryn, 2026-09-11)
 ),
 VisitBase AS (
     SELECT *
@@ -169,7 +170,7 @@ SELECT
     ap.DISCOUNT_AMOUNT,
     ap.LineAmount,
     CASE WHEN ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS IsPurchaseLine,
-    CASE WHEN vb.HasScript = 1 AND ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS Converted
+    CASE WHEN ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS Converted  -- purchase alone = converted; HasScript is a grouping dimension, not a precondition (fixed 2026-09-11 — see DESIGN.md)
 INTO #PurchaseDetail
 FROM AttributedPurchases ap
 FULL OUTER JOIN VisitBase vb

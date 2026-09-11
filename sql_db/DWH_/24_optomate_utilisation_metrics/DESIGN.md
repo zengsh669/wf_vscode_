@@ -14,17 +14,21 @@ iterated through 6 commits (see Git history) — draft, not yet business-approve
 results are not usable yet because the denominator relies on unconfirmed placeholder parameters
 (see below). Optometrist Utilisation is unblocked for SQL but not yet started.
 
-- **Script-to-Sale Conversion**: Fact table + conversion-rate rollups built. Purchases are matched
-  by **patient + date** (not `EXAM_ID` — see reliability finding below) and attributed to exactly
-  ONE visit each (the most recent attended visit on/before the purchase date, preferring a
-  scripted visit over an unscripted one) — this avoids the double-counting that a naive
-  patient+date join produces when a patient has multiple visits. Exclusions use business-confirmed
-  rules: `INVOICE.TYPE=6` (returns), `STOCK_TYPE=1` (consultation fee), `CHARGETO='MEDICARE'`, and
-  `ITEMCATEGORY.IS_CONSULTATION=1` or `IDENTIFIER IN ('REPR','WOFF','~ACC')` — the last one
-  replaced an earlier hand-maintained 41-line product list once a reliable join path was found and
-  verified. **Still open**: side-by-side same-day/1-week/2-week window comparison (currently one
-  window at a time via `@DateWindowDays`), and a Walk-In Sales summary rollup (detail rows exist,
-  no aggregate yet). Not yet reviewed by business.
+- **Script-to-Sale Conversion**: Fact table + conversion-rate rollups built. `HasScript` checks
+  both `SPECTACLE_RX` and `CONTACT_RX` (Kathryn, 2026-09-11). Purchases are matched by **patient +
+  date** (not `EXAM_ID` — see reliability finding below) and attributed to exactly ONE visit each
+  (the most recent attended visit on/before the purchase date, preferring a scripted visit over an
+  unscripted one) — this avoids the double-counting that a naive patient+date join produces when a
+  patient has multiple visits. Exclusions use business-confirmed rules: `INVOICE.TYPE=6` (returns),
+  `STOCK_TYPE=1` (consultation fee), `CHARGETO='MEDICARE'`, and `ITEMCATEGORY.IS_CONSULTATION=1` or
+  `IDENTIFIER IN ('REPR','WOFF','~ACC')` — the last one replaced an earlier hand-maintained 41-line
+  product list once a reliable join path was found and verified. A bug where `Converted` was
+  wrongly forced to 0 for every unscripted visit was found and fixed 2026-09-11 (overall conversion
+  rate moved 48.9% → 53.1%) — see the metric section for details. **Still open**: side-by-side
+  same-day/1-week/2-week window comparison (currently one window at a time via `@DateWindowDays`),
+  a Walk-In Sales summary rollup (detail rows exist, no aggregate yet), and whether the purchase-
+  attribution rule's bias toward "With Script" should change now that the `Converted` bug is fixed.
+  Not yet reviewed by business.
 - **Chair Utilisation**: `select_Chair_Utilisation.sql` written and tested (2026-09-10) — fact
   table (`#ChairAppointmentDetail`, one row per attended appointment) + a per-branch metrics
   rollup, same two-stage structure as Script-to-Sale. Only 5 branches (DUB/LIT/MAK/ORA/WOL) have
@@ -47,14 +51,17 @@ results are not usable yet because the denominator relies on unconfirmed placeho
 subsequently completed a purchase ÷ relevant appointments/patients.
 
 **Data status:** SQL written (`select_Script_To_Sale_Conversion.sql`), tested against live data,
-4 commits in. Not yet reviewed or approved by business.
+6 commits in. Not yet reviewed or approved by business.
 
 **How the query works (current implementation):**
 - **Attendance**: `APPOINTMENT.APP_PROGRESS IN (2,3,4,5,10)` (Waiting/Pre-test/Consulting/Complete/
   Dilating — full code list confirmed by Kathryn from the Optomate front end, 2026-09-10; see
   decode table below), excluding `IS_BREAK=1` and `PATIENTID` of `-1`/`NULL` (placeholder/break
   rows not always caught by `IS_BREAK` — confirmed by a colleague, 2026-09-10).
-- **Script**: same-patient/same-day match to `EXAMINATION`, then `EXAMINATION.ID = SPECTACLE_RX.EXAM_ID`.
+- **Script**: same-patient/same-day match to `EXAMINATION`, then `EXAMINATION.ID = SPECTACLE_RX.EXAM_ID`
+  OR `EXAMINATION.ID = CONTACT_RX.EXAM_ID` — a spectacle prescription or a contact lens
+  prescription both count as "has a script" (Kathryn confirmed contact lens scripts count too,
+  2026-09-11).
 - **Purchase linking**: patient + date, NOT `EXAM_ID` (see reliability finding below — `EXAM_ID`
   is populated for consultation billing but almost never for retail/dispensing invoices).
 - **Purchase attribution — avoids double-counting**: a naive "purchase date ≥ visit date" join lets
@@ -91,6 +98,87 @@ subsequently completed a purchase ÷ relevant appointments/patients.
 - **Business review of the finished query/results**: everything above has been confirmed rule-by-
   rule in conversation, but the assembled query and its output have not yet been formally shown
   to Kathryn (or anyone in business) for sign-off.
+- **`HasScript` now includes `CONTACT_RX` (fixed 2026-09-11)** — previously only checked
+  `SPECTACLE_RX`; a patient who only received a contact lens script was wrongly treated as
+  `HasScript=0`. Kathryn confirmed (2026-09-11) contact lens scripts should count the same as
+  spectacle scripts. Fix: `ScriptFlag` now also `LEFT JOIN CONTACT_RX cr ON cr.EXAM_ID =
+  efa.ExamID`, condition is `sr.ID IS NOT NULL OR cr.ID IS NOT NULL` (83 `CONTACT_RX` rows, all
+  `TRIAL_ONLY=0`, joins via `EXAM_ID` the same way as `SPECTACLE_RX` — no trial-only rows to filter
+  out). This can widen the known fact-table duplication below, since two RX tables now both join
+  on `ExamID`. (Also checked `EXAM_EXTRA_RX`, another RX-suffixed table — currently empty, 0 rows,
+  excluded from consideration.)
+- **Bug found and fixed 2026-09-11 — `Converted` was wrongly conditioned on `HasScript`.** The
+  original formula was `HasScript = 1 AND <has a purchase>`, which forced `Converted = 0` for every
+  `HasScript = 0` visit regardless of whether a purchase actually happened — making the "No Script"
+  row in the with/without-script comparison always show a 0% conversion rate by definition, not by
+  data (confirmed in a live run: several `HasScript = 0` appointments had real linked invoices, yet
+  `Converted` was 0 for all of them). Root cause: `HasScript` is a grouping dimension for the
+  with/without-script comparison, but it had also been baked into the fact itself. Fix: `Converted`
+  is now just `<has a purchase>`, with `HasScript` left as a separate column to group/filter by
+  downstream. After the fix (same live data): overall conversion rate 48.9% → 53.1%; No Script
+  conversion rate 0% → 12.5% (With Script stayed at 73.9%). All three rollup queries needed no
+  changes — the fix was entirely in the `#PurchaseDetail` fact table's `Converted` column.
+- **New open question raised by the above fix — the purchase-attribution rule still favours
+  "With Script" once script ever existed for that patient.** The `OUTER APPLY` in
+  `AttributedPurchases` ranks a scripted visit ahead of a closer unscripted one (see "Purchase
+  attribution" above). Now that `Converted` no longer depends on `HasScript`, this ranking's only
+  remaining effect is which group (With Script / No Script) a purchase's conversion gets counted
+  under, and how `DaysAfterAppointment` comes out for the `@DateWindowDays` check. Practical
+  consequence: a "No Script" conversion can currently only occur for a patient with **no scripted
+  visit at all** in their history — if a patient has ever had a scripted visit, every later purchase
+  attributes to that visit (or the most recent scripted one) over any closer unscripted visit, even
+  if the purchase happened right after an unscripted visit. So the With Script vs No Script
+  comparison currently measures "has this patient ever had a script" more than "did this specific
+  visit have a script" — worth flagging if this comparison is shown to business, and worth deciding
+  whether the attribution rule should change now that its original motivation (maximising
+  `Converted` under the old, buggy formula) no longer applies.
+- **Known duplication in the fact table's join chain (verified 2026-09-11):**
+  - 13 `(PATIENT_ID, EXAM_DATE)` pairs have more than one `EXAMINATION` row (one has 3) — i.e. the
+    join from `AttendedAppointments` to `EXAMINATION` (by patient + date) is not always 1:1.
+  - 45+ `EXAM_ID` values have more than one `SPECTACLE_RX` row (mostly 2, one has 3, one has 4) —
+    confirmed NOT a left/right-eye split (`RIGHT_EYE`/`LEFT_EYE` both 0 on sampled duplicates);
+    looks like a re-entered/corrected prescription (same patient/exam/`RXDATE`, `DATE_ADDED` a few
+    minutes apart) rather than two genuinely different scripts.
+  - **Effect on `#PurchaseDetail` row count**: either kind of duplication can make a single
+    `AppointmentID` appear on more than one row in the raw fact table. This does NOT affect
+    `Conversion_Rate` or the other rollup numbers, because `#VisitRollup` groups by `AppointmentID`
+    and uses `MAX(HasScript)`/`MAX(Converted)` — safe against duplicate rows for a 0/1 flag. It WOULD
+    affect any calculation done directly on `#PurchaseDetail` without first rolling up by
+    `AppointmentID` (e.g. a raw `COUNT(*)` or `SUM(LineAmount)` on the fact table would double-count
+    these rows). Anyone querying `#PurchaseDetail` directly should be aware of this.
+  - **Effect on `HasScript` specifically — checked and confirmed correct behaviour (2026-09-11)**:
+    an independent review raised the concern that if the `EXAMINATION` duplication causes one
+    `AppointmentID` to carry both a scripted and an unscripted exam row, `MAX(HasScript)` would
+    always resolve to 1 (scripted) even when only one of the two exams actually had a script —
+    potentially overstating `Visits_With_Script`. Verified against live data: **9 AppointmentIDs**
+    have exactly this pattern (2 rows each, one `HasScript=0` and one `HasScript=1`). Business
+    confirmed (2026-09-11): when one appointment resolves to two exam rows and only one has a
+    script, it should still count as "has a script" — so `MAX(HasScript)` is the **correct**
+    behaviour here, not a bug. (Affects 9 / 2,959 attended visits, ~0.3% — immaterial to the
+    conversion-rate figures either way, but now confirmed correct rather than just "probably
+    small.")
+  - **A separate fan-out risk was also checked and ruled out (2026-09-11)**: the same independent
+    review flagged that the `ITEMS`/`ITEMCATEGORY` lookup joins used both for the exclusion rule
+    (lines ~95-101) and for the display columns `ItemCategoryIdentifier`/`ItemCategoryName` (lines
+    ~102-103) could fan out `QualifyingPurchaseLines` if `ITEMS.ID` or `ITEMCATEGORY.IDENTIFIER`
+    were not unique, inflating purchase-line counts and `LineAmount` sums before attribution ever
+    happens. Verified against live data: both `ITEMS.ID` and `ITEMCATEGORY.IDENTIFIER` are unique
+    (zero duplicate groups for either). This fan-out risk does not exist in the current data — no
+    change needed.
+- **`@ScriptFilter` is only safe at its default value `'ALL'` — do not switch it without revisiting
+  this note first (found 2026-09-11, not fixed, by design — see below).** `AttributedPurchases`'s
+  `OUTER APPLY` sources candidate visits from `VisitBase`, which is already filtered by
+  `@ScriptFilter`. Under the default `'ALL'`, this is a no-op (nothing is filtered out) and every
+  number in this document was produced with `'ALL'`. But if `@ScriptFilter` is ever set to
+  `'WITH_SCRIPT'` or `'NO_SCRIPT'`, the pool of visits available for attribution shrinks along with
+  it — e.g. under `'NO_SCRIPT'`, no scripted visit exists in `VisitBase` at all, so the "prefer a
+  scripted visit" priority in the attribution rule becomes meaningless and purchases that should
+  attribute to a scripted visit instead fall back to an older unscripted one or become an
+  unattributed Walk-In Sale candidate — silently changing `Converted`/`DaysAfterAppointment` in a
+  way neither the SQL header comment nor (until now) this document mentioned. Decision: not fixing
+  this now, since the variable is only ever run at `'ALL'` in practice. If `WITH_SCRIPT`/
+  `NO_SCRIPT` are ever actually needed, attribute from the unfiltered visit set first, then apply
+  `@ScriptFilter` only to what's displayed.
 
 #### Script-to-Sale reliability finding (2026-09-09, verified against live Optomate data)
 
@@ -206,7 +294,7 @@ data. See Source Table Mapping below.
 | Appointments | `APPOINTMENT` | `STARTDATE`, `ENDDATE`, `DURATION`, `BRANCH_IDENTIFIER`, `USER_IDENTIFIER`, `APPOINTMENT_TYPE`, `PATIENTID`, `APP_PROGRESS`, `IS_BREAK` | Column structure confirmed; `APP_PROGRESS` decoded — see row below |
 | Appointment types | `APPOINTMENT_TYPES` | `IDENTIFIER`, `DESCRIPTION`, `DEFAULT_DURATION` | Structure confirmed |
 | Attendance status | `APPOINTMENT.APP_PROGRESS` (int, no lookup table in dbo schema) | `APP_PROGRESS IN (2,3,4,5,10)` | **Confirmed by business (Kathryn, 2026-09-10)** — full code list obtained from the Optomate front end (no DB-side lookup table exists), see decode table below. Our original data-inferred guess of `APP_PROGRESS = 5` alone was confirmed correct as far as it went, but Kathryn's Qlik logic also includes 2/3/4/10 (Waiting/Pre-test/Consulting/Dilating) as "Attended", to catch patients whose status was never updated to 5=Complete after they arrived. Implemented in `select_Script_To_Sale_Conversion.sql`. |
-| Scripts / prescriptions | `SPECTACLE_RX` (glasses), `CONTACT_RX` (contact lenses, 82 rows) | `PATIENTID`, `RXDATE`, `EXAM_ID` | Structure confirmed for `SPECTACLE_RX`; need to confirm whether contact lens scripts count too |
+| Scripts / prescriptions | `SPECTACLE_RX` (glasses), `CONTACT_RX` (contact lenses, 83 rows) | `PATIENTID`, `RXDATE`, `EXAM_ID` | Both confirmed and implemented — `HasScript` checks either table (Kathryn, 2026-09-11; see decode below) |
 | Exam link (appointment↔script↔sale) | `EXAMINATION` | `ID`, `PATIENT_ID`, `EXAM_DATE`, `COMPLETED`, `FINALISED` | **Verified**: `EXAMINATION.ID` = `SPECTACLE_RX.EXAM_ID` = `INVOICE.EXAM_ID` join confirmed against real data (20-row sample, all `COMPLETED=1` exams). `SPECTACLE_RX` is present for ~13/20 exams (script is optional, not automatic) |
 | Sales / purchases | `INVOICE`, `INVOICE_ITEMS` | `INVOICE.PATIENTID`, `SALE_DATE`, `EXAM_ID`, `TYPE`; `INVOICE_ITEMS.DESCRIPTION`, `STOCK_TYPE`, `QTY`, `EXTENDED` | **Important correction from data**: an `INVOICE` is generated for almost every completed `EXAMINATION` (consultation fee), so presence of an `INVOICE` alone does NOT mean a retail purchase happened. "Completed a purchase" must be judged from `INVOICE_ITEMS` line detail (see `STOCK_TYPE` decode below) |
 
