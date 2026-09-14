@@ -139,6 +139,11 @@ IF OBJECT_ID('tempdb..#LeaveByPersonDay') IS NOT NULL DROP TABLE #LeaveByPersonD
         ON e.emp_code = pos.emp_code
     JOIN [ConnX].[dbo].[q2vEmployeeLeaveHistory] h
         ON e.emp_code = h.emp_code
+       AND h.date_start >= pos.Date_Held_From                      -- leave must fall within THIS
+       AND h.date_start <= ISNULL(pos.Date_Held_To, '9999-12-31')  -- position segment, not any
+                                                                     -- segment this emp_code ever
+                                                                     -- held (fixes fan-out — see
+                                                                     -- select_ConnX_Optometrist_Leave.sql)
     WHERE pos.Role_Name LIKE '%Optometrist%'
 ),
 -- Every calendar day each leave record spans, joined against the roster to
