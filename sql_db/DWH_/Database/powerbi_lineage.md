@@ -5,7 +5,7 @@
 ## Montly Membership Report
 
 **Workspace:** All Staff  
-**Size Bucket(MB):** 150  
+**Size Bucket(MB):** 100  
 **Scheduled Refresh:** At 9:00 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
 - *DimDate till 30/06/2027*
@@ -247,7 +247,7 @@
 
 ## KPI Tracker
 
-**Workspace:** Developer Workings  
+**Workspace:** ELT  
 **Size Bucket(MB):** 10  
 **Scheduled Refresh:** At 6:30 AM every Mon, Tue, Wed, Thu, Fri of every week  
 ***Notes:***
