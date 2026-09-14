@@ -54,6 +54,15 @@ LEFT JOIN [ConnX].[dbo].[q2work_patterns] wp
 LEFT JOIN [ConnX].[dbo].[q2vEmployeeLeaveHistory] h
     ON e.emp_code = h.emp_code
     AND h.date_start >= DATEADD(YEAR, -1, GETDATE())
+    AND h.date_start >= pos.Date_Held_From                        -- leave must fall within THIS
+    AND h.date_start <= ISNULL(pos.Date_Held_To, '9999-12-31')    -- position segment, not any segment
+                                                                     -- this emp_code ever held (fixes
+                                                                     -- fan-out: a leave record with no
+                                                                     -- position reference otherwise
+                                                                     -- matches every position segment,
+                                                                     -- e.g. Ronald Nguyen's Optometrist
+                                                                     -- and Optometrist Lead segments both
+                                                                     -- showing the same leave record)
 WHERE pos.Role_Name LIKE '%Optometrist%'
 ORDER BY [Full Name], pos.Date_Held_From DESC, h.date_start DESC;
 
