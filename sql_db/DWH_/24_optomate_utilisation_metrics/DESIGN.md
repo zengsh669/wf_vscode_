@@ -24,9 +24,10 @@ denominator hours, biasing utilisation upward by an unknown amount (see below).
   date** (not `EXAM_ID` — see reliability finding below) and attributed to exactly ONE visit each
   (the most recent attended visit on/before the purchase date, preferring a scripted visit over an
   unscripted one) — this avoids the double-counting that a naive patient+date join produces when a
-  patient has multiple visits. Exclusions use business-confirmed rules: `INVOICE.TYPE=6` (returns),
-  `STOCK_TYPE=1` (consultation fee), `CHARGETO='MEDICARE'`, and `ITEMCATEGORY.IS_CONSULTATION=1` or
-  `IDENTIFIER IN ('REPR','WOFF','~ACC')` — the last one replaced an earlier hand-maintained 41-line
+  patient has multiple visits. Exclusions use business-confirmed rules: `STOCK_TYPE=1`
+  (consultation fee), `CHARGETO='MEDICARE'`, and `ITEMCATEGORY.IS_CONSULTATION=1` or
+  `IDENTIFIER IN ('REPR','WOFF','~ACC','~MIS')` — `INVOICE.TYPE=6` (returns) is now **included**,
+  not excluded (business-confirmed, 2026-09-14). The `ITEMCATEGORY` rule replaced an earlier hand-maintained 41-line
   product list once a reliable join path was found and verified. A bug where `Converted` was
   wrongly forced to 0 for every unscripted visit was found and fixed 2026-09-11 (overall conversion
   rate moved 48.9% → 53.1%) — see the metric section for details. **Still open**: side-by-side
@@ -89,14 +90,17 @@ subsequently completed a purchase ÷ relevant appointments/patients.
   preferring a visit that has a script over one that doesn't (only falling back to the nearest
   visit regardless of script status if the patient has no scripted visit at all). A purchase that
   predates a patient's first visit (or whose patient has no visit) is a **Walk-In Sale candidate**.
-- **Exclusions** (all business-confirmed, Kathryn, 2026-09-10): `INVOICE.TYPE=6` (returns);
+- **Exclusions** (business-confirmed, Kathryn, 2026-09-10; updated 2026-09-14):
   `INVOICE_ITEMS.STOCK_TYPE=1` (consultation fee); `CHARGETO='MEDICARE'`; and
-  `ITEMCATEGORY.IS_CONSULTATION=1` or `IDENTIFIER IN ('REPR','WOFF','~ACC')` — resolved via
+  `ITEMCATEGORY.IS_CONSULTATION=1` or `IDENTIFIER IN ('REPR','WOFF','~ACC','~MIS')` — resolved via
   `INVOICE_ITEMS.STOCK_ID → ITEMS.ID → ITEMS.CATEGORY_IDENTIFIER → ITEMCATEGORY.IDENTIFIER`. This
   join only covers ~52% of `INVOICE_ITEMS` rows, but the uncovered 48% are entirely
   `STOCK_TYPE` 2/3/4/5/8/9 (frames/lenses/contacts/coatings/tints, which should be included
   anyway), while `STOCK_TYPE=7` — the category that actually needs this exclusion logic —
   resolves at 100%. This replaced an earlier hand-maintained 41-line product exclusion list.
+  **Updated 2026-09-14 (business-confirmed):** `INVOICE.TYPE=6` (returns) is now included rather
+  than excluded, and `~MIS` was added to the `ITEMCATEGORY` exclusion list alongside
+  `REPR`/`WOFF`/`~ACC`.
 - **Grain: per purchase, not per unique patient** (business-confirmed) — a single script commonly
   supports multiple purchases (reading/general-wear/computer glasses bought separately; scripts
   valid 2 years, contacts 12 months; Optomate allows one exam to yield multiple scripts, unlike
@@ -112,8 +116,8 @@ subsequently completed a purchase ÷ relevant appointments/patients.
 - **Walk-In Sales summary**: the fact table already flags these rows (`AppointmentID IS NULL`) and
   they can be pulled out with a simple filter, but there's no aggregate (count, total $) built yet.
 - **`STOCK_TYPE=7`/`ITEMCATEGORY` sign-off**: business gave the exclusion rule directly
-  (`IS_CONSULTATION=1` or `REPR`/`WOFF`/`~ACC`) rather than reviewing our earlier tentative list —
-  this is implemented, but the finished query itself hasn't been sent back for a final check.
+  (`IS_CONSULTATION=1` or `REPR`/`WOFF`/`~ACC`/`~MIS`) rather than reviewing our earlier tentative
+  list — this is implemented, but the finished query itself hasn't been sent back for a final check.
 - **Business review of the finished query/results**: everything above has been confirmed rule-by-
   rule in conversation, but the assembled query and its output have not yet been formally shown
   to Kathryn (or anyone in business) for sign-off.
@@ -178,8 +182,8 @@ subsequently completed a purchase ÷ relevant appointments/patients.
     small.")
   - **A separate fan-out risk was also checked and ruled out (2026-09-11)**: the same independent
     review flagged that the `ITEMS`/`ITEMCATEGORY` lookup joins used both for the exclusion rule
-    (lines ~95-101) and for the display columns `ItemCategoryIdentifier`/`ItemCategoryName` (lines
-    ~102-103) could fan out `QualifyingPurchaseLines` if `ITEMS.ID` or `ITEMCATEGORY.IDENTIFIER`
+    and for the display columns `ItemCategoryIdentifier`/`ItemCategoryName` could fan out
+    `QualifyingPurchaseLines` if `ITEMS.ID` or `ITEMCATEGORY.IDENTIFIER`
     were not unique, inflating purchase-line counts and `LineAmount` sums before attribution ever
     happens. Verified against live data: both `ITEMS.ID` and `ITEMCATEGORY.IDENTIFIER` are unique
     (zero duplicate groups for either). This fan-out risk does not exist in the current data — no
@@ -482,7 +486,7 @@ show, or purely SMS/reminder tracking, not attendance).
 | 2 | Standard invoice (majority case — consultation and/or retail mixed) | 7,282 | Overwhelming majority, near-all positive totals | Include; still needs `STOCK_TYPE` line filtering to isolate actual retail purchase |
 | 5 | Standard sale invoice, retail-heavy (frames/lenses/contacts) | 963 | All positive totals, avg $577; item samples almost entirely spectacle/sunglass/lens/contact lens product lines | Include as completed sale |
 | 1 | Standard sale invoice, small-value (drops/accessories/occasional frame) | 26 | All positive totals, avg $46; item samples are drops, cleaning wipes, occasional frames | Include as completed sale |
-| 6 | Return / credit note | 43 | 100% negative totals, avg -$493 | **Exclude** — not a completed purchase |
+| 6 | Return / credit note | 43 | 100% negative totals, avg -$493 | **Include** (business-confirmed, 2026-09-14 — previously excluded) |
 
 ### Source Table Mapping (continued)
 
@@ -492,7 +496,7 @@ show, or purely SMS/reminder tracking, not attendance).
 | Optometrist roster / clinical hours | `CLOCKINOUT` | `USER_IDENTIFIER`, `BRANCH_IDENTIFIER`, `IN_TIME`, `OUT_TIME` | Structure confirmed — matches "Clinical Hours Worked" concept |
 | Staff / optometrist dimension | `USERS` | `IDENTIFIER`, `FULL_NAME`, `USER_TYPE`, `QUALIFICATION`, `PROVIDERNO` | **Confirmed**: `USER_TYPE = 1` = Optometrist. Verified by cross-tab against `APPOINTMENT`: all 221,600 attended appointments (`APP_PROGRESS=5`) belong to `USER_TYPE=1` users; every other `USER_TYPE` (2,3,4,5) has zero appointments, despite some also having clock-in records (front desk/dispensing/admin staff who clock in but don't see patients). **Important correction**: of the 17 `USER_TYPE=1` records, only 9 are real optometrists with actual clock-in and appointment activity (MB, TB, AL, JMC, RN, ZA, KL, SA, AG, JN — 10 total, one of which (JN) has low volume). The other 7 (`LIT`, `MAK`, `DUB`, `WOL`, `ORA` — branch placeholder accounts; `EXT` — external Rx; `CB` — inactive/admin) have zero clock-in and zero appointments and must be excluded from optometrist headcount/denominator calculations |
 | Product/fee category | `INVOICE_ITEMS.STOCK_TYPE` (int, no lookup table found) | 1,2,3,4,5,7,8,9 | **Decoded from sample descriptions** (see table below). Type 7 is a mixed bucket, resolved via `ITEMCATEGORY` (see below), not per-description guessing |
-| Exclusion category lookup | `ITEMCATEGORY` (`IDENTIFIER`, `NAME`, `IS_CONSULTATION`) | `IS_CONSULTATION`, `IDENTIFIER` | **Confirmed exclusion rule (Kathryn, 2026-09-10)**: exclude a line if `IS_CONSULTATION=1` or `IDENTIFIER IN ('REPR','WOFF','~ACC')`. Only 4 categories have `IS_CONSULTATION=1` (`~CLC`, `~CON`, `~COT`, `~COS` — all consultation types); `REPR`/`WOFF`/`~ACC` are separate identifiers with `IS_CONSULTATION=0`, added to the rule as an OR, not an AND (business's own SQL phrasing was ambiguous here — clarified in conversation) |
+| Exclusion category lookup | `ITEMCATEGORY` (`IDENTIFIER`, `NAME`, `IS_CONSULTATION`) | `IS_CONSULTATION`, `IDENTIFIER` | **Confirmed exclusion rule (Kathryn, 2026-09-10; updated 2026-09-14)**: exclude a line if `IS_CONSULTATION=1` or `IDENTIFIER IN ('REPR','WOFF','~ACC','~MIS')`. Only 4 categories have `IS_CONSULTATION=1` (`~CLC`, `~CON`, `~COT`, `~COS` — all consultation types); `REPR`/`WOFF`/`~ACC`/`~MIS` are separate identifiers with `IS_CONSULTATION=0`, added to the rule as an OR, not an AND (business's own SQL phrasing was ambiguous here — clarified in conversation) |
 | Category join path | `INVOICE_ITEMS.STOCK_ID → ITEMS.ID → ITEMS.CATEGORY_IDENTIFIER → ITEMCATEGORY.IDENTIFIER` | `STOCK_ID` | **Verified**: resolves ~52% of all `INVOICE_ITEMS` rows, but the unresolved 48% is entirely `STOCK_TYPE` 2/3/4/5/8/9 (frames/lenses/contacts/coatings/tints — included regardless of category), while `STOCK_TYPE=7` — the only category that actually needs this exclusion check — resolves at 100%. Rows with no category match default to "not excluded" |
 
 ### `INVOICE_ITEMS.STOCK_TYPE` decode (from sampled descriptions, not an official lookup)
@@ -527,10 +531,11 @@ Git history for the commit that replaced it with the `ITEMCATEGORY` rule above).
    `INVOICE_ITEMS` line detail, not from invoice existence alone.
 4. ~~Identify `INVOICE_ITEMS.STOCK_TYPE` distinct values~~ — done. ~~Resolve `STOCK_TYPE=7`
    include/exclude~~ — done, business gave the rule directly (`ITEMCATEGORY.IS_CONSULTATION=1`
-   or `IDENTIFIER IN REPR/WOFF/~ACC`) rather than reviewing the tentative per-description list;
+   or `IDENTIFIER IN REPR/WOFF/~ACC/~MIS`) rather than reviewing the tentative per-description list;
    implemented and verified in `select_Script_To_Sale_Conversion.sql`.
 5. ~~Confirm which `INVOICE.TYPE` values represent a genuinely completed sale~~ — done. TYPE 1, 2,
-   5 = genuine sales (include); TYPE 6 = return/credit note (exclude) — see decode table above.
+   5, 6 = include (TYPE 6 = return/credit note, changed from exclude to include, business-confirmed
+   2026-09-14) — see decode table above.
 6. ~~Confirm which `USERS.USER_TYPE` value(s) identify optometrists~~ — done, `USER_TYPE = 1`
    confirmed via appointment cross-tab (see table above).
 7. ~~Confirm location dimension/grain for Chair Utilisation split~~ — done. Use

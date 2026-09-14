@@ -2,12 +2,6 @@
  Script-to-Sale Conversion — FACT TABLE (draft, not business-approved)
  Grain: visit x purchase, each invoice attributed to exactly ONE visit (most
  recent attended visit on/before the sale date) to avoid double-counting.
- A visit with no purchase, or a purchase with no prior visit ("Walk-In Sale"
- candidate), still appears with the other side NULL.
- Attended = APP_PROGRESS IN (2,3,4,5,10); purchase matched by patient+date,
- not EXAM_ID; excluded if ITEMCATEGORY.IS_CONSULTATION=1 or IDENTIFIER IN
- ('REPR','WOFF','~ACC') — all business-confirmed (2026-09-10).
- Full rules and evidence: DESIGN.md.
 */
 
 -- ============================================================================
@@ -97,11 +91,11 @@ QualifyingPurchaseLines AS (
             FROM ITEMS itm
             JOIN ITEMCATEGORY cat2 ON cat2.IDENTIFIER = itm.CATEGORY_IDENTIFIER
             WHERE itm.ID = ii.STOCK_ID
-              AND (cat2.IS_CONSULTATION = 1 OR cat2.IDENTIFIER IN ('REPR', 'WOFF', '~ACC'))
+              AND (cat2.IS_CONSULTATION = 1 OR cat2.IDENTIFIER IN ('REPR', 'WOFF', '~ACC', '~MIS'))
        )
     LEFT JOIN ITEMS itm2 ON itm2.ID = ii.STOCK_ID
     LEFT JOIN ITEMCATEGORY cat ON cat.IDENTIFIER = itm2.CATEGORY_IDENTIFIER
-    WHERE i.TYPE IN (1, 2, 5)                        -- genuine sale invoice types (exclude TYPE 6 returns)
+    WHERE i.TYPE IN (1, 2, 5, 6)                        -- genuine sale invoice types (TYPE 6 returns)
 ),
 -- Attribute each purchase line to exactly ONE visit: the most recent attended
 -- visit for that patient on or before the purchase date (no earlier cap).
@@ -170,7 +164,7 @@ SELECT
     ap.DISCOUNT_AMOUNT,
     ap.LineAmount,
     CASE WHEN ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS IsPurchaseLine,
-    CASE WHEN ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS Converted  -- purchase alone = converted; HasScript is a grouping dimension, not a precondition (fixed 2026-09-11 — see DESIGN.md)
+    CASE WHEN ap.InvoiceItemID IS NOT NULL THEN 1 ELSE 0 END AS Converted  -- purchase alone = converted; HasScript is a grouping dimension, not a precondition
 INTO #PurchaseDetail
 FROM AttributedPurchases ap
 FULL OUTER JOIN VisitBase vb
