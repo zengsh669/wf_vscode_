@@ -301,142 +301,175 @@ placeholders — **not usable as real figures**):
 
 ### 3. Optometrist Utilisation
 
-**Definition:** Attended Appointment Duration (hours) ÷ Clinical Hours Worked.
+**Definition:** Attended Appointment Duration (hours) ÷ Clinical Hours Worked, split into an
+optometrist share and a locum share.
 
-**Grain: branch + day, not per-optometrist (deliberate scope decision, 2026-09-11).** The ConnX
-roster only covers optometrists with clean HR records (the ~5-6 permanent staff); locum
-optometrists are not yet distinguished or included (see "known gap" below), so a per-person split
-isn't reliable yet — a branch/day total sidesteps needing to attribute each appointment to a named
-optometrist.
+**Design superseded 2026-09-15 (business-confirmed) — fixed branch capacity, no roster headcount,
+no `USER_APP_ADJUST` layer.** The original design (below, kept for history) computed the
+denominator from a hand-matched roster headcount and later added a third layer reading
+`USER_APP_ADJUST.INACTIVE=1` to catch no-shows. Both were abandoned:
+- The roster-headcount Layer 1 broke down once `USER_APP_ADJUST` testing surfaced branch/day rows
+  with far more "inactive" hours than the roster said were ever available (e.g. MAK showed 26
+  inactive hours against a 14-hour theoretical capacity) — root cause: `USER_APP_ADJUST` records
+  belong to Optomate `USER_IDENTIFIER`s (via `USERS`), not to the ConnX roster, so it freely
+  includes locums and other non-rostered staff. Filtering it down to only the 10 rostered names
+  required a ConnX-name ↔ Optomate-identifier mapping that turned out to be incomplete and
+  partly wrong (see below) — the whole approach was judged too fragile to keep patching.
+- **Business's actual mental model, once asked directly**: each branch has a **fixed clinical
+  capacity per day** — 7 hours for a single-optometrist branch, 14 hours for ORA (two positions) —
+  that does **not** shrink when the rostered optometrist is away, because a locum covers the gap.
+  Locums are highly mobile (not tied to one branch, not on a clean HR record) and are deliberately
+  **not tracked individually** — only the rostered optometrists' leave is tracked from ConnX.
 
-**Numerator**: `select_Optometrist_Utilisation.sql`'s `#OptometristAppointmentDetail` — identical
-fact-table pattern to `select_Chair_Utilisation.sql` (same "attended" filter:
-`APP_PROGRESS IN (2,3,4,5,10)`, `IS_BREAK=0`, `PATIENTID>0`), rolled up to branch+day in the
-METRICS stage. Carries `OptometristIdentifier` (`USER_IDENTIFIER`) as a column, but that column is
-currently unused downstream — see "known gap" below.
+**Current design (`select_Clinical_Hours_Worked.sql`, re-embedded in
+`select_Optometrist_Utilisation.sql`), business-confirmed 2026-09-15:**
 
-**Denominator — `CLOCKINOUT` (Optomate) ruled out (2026-09-11): systemic data-quality issues.**
-Originally assumed usable as-is (see prior status below), but exploration found:
-- `IN_TIME`/`OUT_TIME` are `TIME`-only columns (no date) — the date must come from `TIMESTMP`
-  (verified: `CAST(TIMESTMP AS DATE)` matches `CAST(DATE_ADDED AS DATE)` for 100% of rows, so
-  `TIMESTMP`'s date part is a reliable "which day is this record for" key).
-- Same-optometrist-same-day multiple records are common, not rare: of all same-day gaps between
-  consecutive clock-ins, 401 were under 15 minutes (likely duplicate/system-generated), 132 were
-  15–60 minutes, and only 310 were over 60 minutes (a plausible real gap between shifts).
-- Root cause (sampled): a single clock-in action appears to write one row **per branch the
-  employee has access to**, not one row for the branch they're actually working at that moment —
-  e.g. optometrist AE clocked in at LIT (07:49) and MAK (07:55) within the same 15 minutes, with
-  overlapping/implausible IN/OUT pairs (one case: IN 17:10, OUT 17:11 — a 1-minute "shift").
-  Confirmed this affects **real, confirmed optometrists** too (not just non-optometrist accounts):
-  SA and MB both show multi-branch same-day clock records — ruling out "just filter out the bad
-  accounts" as a fix, since the issue is systemic, not user-specific.
-  - No independent roster/timesheet/shift table exists in Optomate to cross-check against —
-    `CLOCKINOUT` is the only table matching `%CLOCK%`/`%ROSTER%`/`%SHIFT%`/`%TIMESHEET%`/
-    `%SCHEDULE%`/`%ATTENDANCE%` in `INFORMATION_SCHEMA.TABLES`.
-- **Decision: abandon `CLOCKINOUT` for this metric's denominator.**
+- **`@BranchCapacity`** — a fixed hours/day constant per branch: DUB/MAK/LIT/WOL = 7 (one
+  optometrist position), ORA = 14 (two positions: Anwari, Zahra + McLeish, June). Not derived from
+  headcount — a flat business number.
+- **`@OptometristRoster`** — trimmed to the **6 rostered optometrists only** (no locums), each with
+  a confirmed Optomate `Identifier` (see table below):
 
-**Denominator — ConnX approach, built (2026-09-11): `select_Clinical_Hours_Worked.sql`
-(standalone draft) and re-embedded in `select_Optometrist_Utilisation.sql`.** Not Optomate — a
-separate database, joined to Optomate data via optometrist name matching, not a shared key.
-Two layers:
+  | Name | Identifier | Branch | Position From–To | Hours/day | Days off |
+  |---|---|---|---|---|---|
+  | Anastovski, Steve | SA | WOL | 2026-06-09 – current | 7 | Sat, Sun |
+  | Anwari, Zahra | ZA | ORA | 2023-02-06 – current | 7 | Sat, Sun |
+  | Bemrose, Trevor | TB | DUB | 2014-07-01 – current | 7 | Sat, Sun |
+  | Burmi, Mukesh | MB | LIT | 2023-09-04 – current | 7 | Sat, Sun |
+  | McLeish, June | JMC | ORA | 2014-07-01 – current | 7 | Mon, Thu, Fri, Sat, Sun (Tue/Wed only) |
+  | Nguyen, Ronald (Optometrist) | RN | MAK | 2015-03-30 – 2024-09-12 | 7 | Sat, Sun |
+  | Nguyen, Ronald (Lead) | RN | MAK | 2024-09-13 – current | 7 | Sat, Sun |
 
-1. **Layer 1 — theoretical hours, no leave.** A hand-maintained `@OptometristRoster` table variable
-   (name, `BranchIdentifier`, `PositionFrom`/`PositionTo`, `HoursPerDay`, `DaysOff`) — see roster
-   table below — joined against **working days** (branch/days with an actual attended appointment
-   in Optomate, same definition as Chair Utilisation's Working Days — NOT a calendar spine, since
-   that would wrongly count public holidays as expected-work days). For each branch/day, count how
-   many rostered optometrists are on duty (in their employment window, not on a day off) ×
-   `HoursPerDay`.
-2. **Layer 2 — subtract leave.** ConnX's `q2vEmployeeLeaveHistory.hours` is the total for the
-   **whole `date_start`–`date_end` span**, not a single day (verified: one record showed 105 hours
-   across a 15-working-day span = 7 hrs/day, not 105 hours in one day). Fix: expand each leave
-   record across every day in its span, sum all matching records for a given person-day FIRST,
-   then cap the sum at 7 hours (a person can only be absent at most one day's worth of hours on
-   any single day — mathematically equivalent to exact pro-rating without needing to compute how
-   many rostered days a span covers, as long as `HoursPerDay` is uniform, which it is today).
+  Dropped from the old 10-person roster: Bemrose, Colin; Lam, Anthony; Liao, Pei-Chun — all
+  confirmed (2026-09-14, via `USER_APP_ADJUST` investigation) to be **locums**, not rostered staff
+  — `select_Clinical_Hours_Worked.sql`'s header has the full reasoning. **Khou, Vincent** — still
+  unconfirmed against `USERS` (no matching `IDENTIFIER` found under "Khou") — dropped from the
+  roster for now since he never appears with an `INACTIVE=1` row in `USER_APP_ADJUST`, so his
+  absence from the roster doesn't currently affect any calculation; needs resolving before any
+  future feature relies on a complete 7-person LIT/ORA roster.
 
-- **Name-matching verified (2026-09-11)**: 8 sampled ConnX `Role_Name = 'Optometrist'` employees
-  (Bemrose, McLeish, Nguyen, Khou, Lam, Liao, Bemrose (Colin), Anastovski) all matched an Optomate
-  `USERS.FULL_NAME` row by plain substring match — no shared key between the two systems, this is
-  a soft/string match, not a verified 1:1 join; edge cases (misspellings, middle names, two
-  different people sharing a surname — e.g. ConnX has both "Bemrose, Colin" and "Bemrose, Trevor")
-  are a known risk. **This match was only ever done once, by hand, to build the roster below — the
-  SQL itself never re-verifies it. `#OptometristAppointmentDetail.OptometristIdentifier` (Optomate)
-  and `@OptometristRoster.FullName` (ConnX) are never joined to each other anywhere in
-  `select_Optometrist_Utilisation.sql`** — the roster only ever connects to Optomate data via
-  `BranchIdentifier` + date. See "known gap" below for the consequence.
-- **Roster — 10 optometrists, built into `@OptometristRoster` (2026-09-11).** Excludes 2 of the 12
-  ConnX-confirmed optometrists whose employment ended before Optomate's data even starts
-  (2026-02-23, the earliest `APPOINTMENT` date across all branches): Clothier, Gary (Lithgow, to
-  2022-09-01) and Nguyen, Trieu (Lithgow, to 2025-07-01 — this also sidesteps needing to resolve
-  his ambiguous "TC35hrs Casual" Work Pattern, since he predates the data window regardless).
-  Ronald Nguyen appears as **two roster rows**, not merged, because ConnX shows him with two
-  separate position segments (Optometrist to 2024-09-12, then Optometrist Lead from 2024-09-13) —
-  kept separate on principle so a future schedule change on either segment isn't silently lost by
-  merging, even though today's hours/days happen to be identical on both.
+- **Layer 1 — fixed capacity.** `Theoretical_Available_Hours` = `@BranchCapacity` on every working
+  day (day with ≥1 attended appointment at that branch — unchanged definition). Replaces the old
+  roster-headcount multiplication entirely.
+- **Layer 2 — rostered optometrist's leave only, on days they were actually rostered.**
+  `#RosteredWorkingDays` marks, per person/day, whether that day falls in their `PositionFrom`–
+  `PositionTo` window and is not one of their `DaysOff` — e.g. McLeish's Mon/Thu/Fri were never
+  "hers" to begin with, so a leave record spanning one of those days can't count as her leave.
+  ConnX leave (`q2vEmployeeLeaveHistory`) is matched only against those rostered days, summed per
+  person/day, then capped at `HoursPerDay` (unchanged capping logic from the original design, still
+  correct: verified against a real 35-hour/7-day span record for Anwari, Zahra covering
+  2026-09-07–13, which — because she was rostered on the resulting working days that week — capped
+  correctly to her `HoursPerDay` each day rather than needing manual pro-rating; see
+  `select_Clinical_Hours_Worked.sql` git history for the trace).
+- **Output columns, all shown for visibility, not double-subtracted:**
+  - `Theoretical_Available_Hours` — the fixed branch capacity for that day.
+  - `Optom_Not_Scheduled_Hours` = capacity − (hours actually rostered that day) — the
+    **structural** gap (e.g. ORA on McLeish's day off: only Anwari's 7 of the 14 hours were ever
+    rostered).
+  - `Total_Leave_Hours` — the **leave** gap (rostered but absent).
+  - `Clinical_Hours_Worked` = `Theoretical_Available_Hours`, **unchanged** — leave is NOT
+    subtracted here (2026-09-15 fix — see below for why).
 
-  | Name | Branch | Position From–To | Hours/day | Days off |
-  |---|---|---|---|---|
-  | Anastovski, Steve | WOL | 2026-06-09 – current | 7 | Sat, Sun |
-  | Anwari, Zahra | ORA | 2023-02-06 – current | 7 | Sat, Sun |
-  | Bemrose, Colin | DUB | 2025-05-01 – current | 7 | Sat, Sun |
-  | Bemrose, Trevor | DUB | 2014-07-01 – current | 7 | Sat, Sun |
-  | Burmi, Mukesh | LIT | 2023-09-04 – current | 7 | Sat, Sun |
-  | Khou, Vincent | LIT | 2023-06-19 – current | 7 | Sat, Sun |
-  | Lam, Anthony | MAK | 2024-07-08 – current | 7 | Sat, Sun |
-  | Liao, Pei-Chun | ORA | 2024-07-08 – current | 7 | Sat, Sun |
-  | McLeish, June | ORA | 2014-07-01 – current | 7 | Mon, Thu, Fri, Sat, Sun (Tue/Wed only) |
-  | Nguyen, Ronald (Optometrist) | MAK | 2015-03-30 – 2024-09-12 | 7 | Sat, Sun |
-  | Nguyen, Ronald (Lead) | MAK | 2024-09-13 – current | 7 | Sat, Sun |
+**Why `Clinical_Hours_Worked` doesn't subtract leave (bug found and fixed 2026-09-15):** the first
+version of this redesign *did* subtract `Total_Leave_Hours` from capacity, mirroring the original
+two-layer design. That produced `Optometrist_Utilisation > 100%` for MAK (211% — 652 attended hours
+÷ a 308.5-hour denominator that had been shrunk by leave) because the **numerator never shrinks**
+when the optometrist is on leave — the locum's appointments still count as attended hours, but
+their capacity had been subtracted away instead of counted. Fix: `Clinical_Hours_Worked` is the
+fixed capacity, full stop; `Optom_Not_Scheduled_Hours`/`Total_Leave_Hours` are informational only.
 
-**SQL status:** both `select_Clinical_Hours_Worked.sql` and `select_Optometrist_Utilisation.sql`
-written and tested (2026-09-11). Test-run per-branch results (branch/day rollup across the whole
-fact-table date range):
+**Optom/locum split (added 2026-09-15), METRICS stage in `select_Optometrist_Utilisation.sql`:**
+business's model is that the optometrist has first claim on attended hours, up to their own
+denominator; any overflow goes to the locum, up to the locum's denominator — but **only when a
+locum denominator actually exists**. Per branch/day:
+- `Optom_Denominator_Hours` = `Clinical_Hours_Worked` − (`Optom_Not_Scheduled_Hours` +
+  `Total_Leave_Hours`).
+- `Locum_Denominator_Hours` = `Optom_Not_Scheduled_Hours` + `Total_Leave_Hours`.
+- If `Locum_Denominator_Hours = 0` (optometrist fully rostered, no leave that day): **all**
+  attended hours go to `Optom_Attended_Hours`, even if that exceeds their denominator — a small
+  overrun with zero locum coverage available is the optometrist working overtime, not a locum
+  appearing from nowhere (bug found and fixed 2026-09-15: the first version of this split forced
+  the overrun onto `Locum_Attended_Hours` regardless, which made no sense against a
+  `Locum_Denominator_Hours` of 0).
+- Otherwise: `Optom_Attended_Hours` = `MIN(attended hours, Optom_Denominator_Hours)`;
+  `Locum_Attended_Hours` = whatever's left over (0 if optom's denominator alone covers everything).
+- **Deliberately not capped at 100%** — `Optom_Utilisation_Pct`/`Locum_Utilisation_Pct` (rolled up
+  per branch in output 3) can exceed 100% on purpose, to surface genuine overload instead of
+  hiding it behind a clamp.
+- Split is **day-granularity only**, not per-appointment — deliberate scope decision: if a 7-hour
+  day has 4 hours from the optometrist and 3 from a locum, this design can't currently tell which
+  specific appointments were whose (that would need per-appointment `OptometristIdentifier`
+  attribution, a finer-grained analysis not built here) — day-level totals are what the business
+  question actually needs.
 
-| Branch | Attended Hours | Clinical Hours Worked | Optometrist Utilisation |
-|---|---|---|---|
-| DUB | 504.7 | 1127.0 | 44.8% |
-| LIT | 683.0 | 1728.4 | 39.5% |
-| MAK | 640.5 | 1093.0 | 58.6% |
-| ORA | 383.5 | 1155.0 | 33.2% |
-| WOL | 64.25 | 160.0 | 40.2% |
+**Output structure, `select_Optometrist_Utilisation.sql`:**
+1. Raw `#OptometristAppointmentDetail` fact table (unchanged from the original design).
+2. Per branch/day: attended hours, capacity, the two gap columns, both denominators, and the
+   optom/locum attended-hours split — **no percentages here**.
+3. Rolled up per branch (whole date range): `Optometrist_Utilisation` (overall, unsplit — original
+   metric, unchanged formula) plus `Optom_Utilisation_Pct` and `Locum_Utilisation_Pct`.
 
-**Bug found and fixed 2026-09-11 — METRICS-stage join fan-out inflated the denominator.** Joining
-the un-rolled-up appointment fact table (many rows per branch/day — one per appointment) directly
-to the denominator (one row per branch/day) and then `SUM()`-ing repeated each day's
-`Clinical_Hours_Worked` once per appointment that day. Confirmed in a live run: this inflated DUB's
-denominator to 9,590 hours instead of a few hundred, driving utilisation down to ~5%. Fix: roll up
-the fact table to exactly one row per branch/day (`#AttendedByBranchDay`) BEFORE joining to the
-denominator. The table above reflects the fix.
+**Test-run results (2026-09-15, after both fixes):**
 
-**Known gap — not yet resolved, makes the table above untrustworthy (found 2026-09-11, independent
-review):** the numerator counts every attended appointment at a branch regardless of which
-optometrist saw the patient; the denominator only has hours for the 10 roster optometrists.
-`OptometristIdentifier` is present in the fact table but never used to restrict the numerator to
-roster-matched optometrists, or to check how much attendance falls outside the roster. If locum
-optometrists (Kathryn mentioned ~5 of them) see any patients, their appointment hours inflate the
-numerator with zero offsetting denominator hours — this can only bias utilisation **upward**, by an
-unknown amount. Not yet quantified: no query has been run to check what fraction of attended
-appointments belong to a `USER_IDENTIFIER` outside the 10-person roster.
+| Branch | Attended Hours | Clinical Hours Worked | Optometrist Utilisation | Optom Util % | Locum Util % |
+|---|---|---|---|---|---|
+| DUB | 516.7 | 595 | 86.8% | 86.7% | 88.6% |
+| LIT | 687.8 | 931 | 73.9% | 77.4% | 47.5% |
+| MAK | 652.0 | 819 | 79.6% | 78.2% | 80.5% |
+| ORA | 387.8 | 1148 | 33.8% | 56.3% | 9.5% |
+| WOL | 66.75 | 175 | 38.1% | 38.4% | 0% |
+
+ORA's low `Locum Util %` (9.5%) against a comparatively large locum denominator (McLeish's
+part-week roster leaves a lot of structural gap) means the two rostered optometrists are covering
+most of ORA's load between them, with locums rarely needed — worth flagging to business as a
+finding, not a bug.
 
 **Open items:**
-- **Quantify the locum/non-roster attendance gap** (see above) — the single largest open risk to
-  this metric's output; not yet measured.
-- **Cost Centre → `BRANCH_IDENTIFIER` mapping is unverified.** Both SQL files hard-code a `CASE`
-  (`'Wollongong Eye Care' → 'WOL'`, etc.) inferred by pattern, not checked against real ConnX
-  `Department` values or Optomate `BRANCH.NAME`. A mismatch (extra whitespace, different naming)
-  would silently drop that branch's roster/leave rows to `NULL` with no error.
-- **`COUNT(*) * MAX(r.HoursPerDay)` in Layer 1 is correct today only because every roster row is 7
-  hrs/day.** If any future roster entry has a different `HoursPerDay` on the same branch/day as
-  others, this formula silently *overstates* the sum (e.g. 2×7 + 1×4 should be 18, formula gives
-  3×7=21) with no warning. Needs to become `SUM` per person-day, not `COUNT * MAX`, before this
-  can safely vary.
-- **Leave-day capping assumes a uniform 7-hour rate across the entire leave span** — correct today,
-  but would silently misstate hours if a leave span ever crosses a `HoursPerDay` change (e.g., a
-  future roster update mid-leave) or if `HoursPerDay` becomes non-uniform.
+- **Khou, Vincent's Optomate `USER_IDENTIFIER` still unresolved** — doesn't block current output
+  (see roster table above) but should be resolved before LIT/ORA roster changes are trusted blind.
+- **Cost Centre → `BRANCH_IDENTIFIER` mapping is unverified** (unchanged from original design) —
+  both SQL files hard-code a `CASE` (`'Wollongong Eye Care' → 'WOL'`, etc.) inferred by pattern,
+  not checked against real ConnX `Department` values or Optomate `BRANCH.NAME`.
 - `Role_Name LIKE '%Optometrist%'` is not yet confirmed exhaustive against every `Role_Name` value
   present in ConnX.
 - Not yet reviewed by business.
+
+<details>
+<summary>Superseded design history (roster-headcount denominator + USER_APP_ADJUST Layer 3,
+2026-09-11 to 2026-09-14 — kept for context, no longer in the SQL)</summary>
+
+**`CLOCKINOUT` (Optomate) ruled out (2026-09-11): systemic data-quality issues.**
+- `IN_TIME`/`OUT_TIME` are `TIME`-only columns (no date) — the date must come from `TIMESTMP`
+  (verified: `CAST(TIMESTMP AS DATE)` matches `CAST(DATE_ADDED AS DATE)` for 100% of rows).
+- Same-optometrist-same-day multiple records are common: of all same-day gaps between consecutive
+  clock-ins, 401 were under 15 minutes (likely duplicate/system-generated), 132 were 15–60 minutes,
+  and only 310 were over 60 minutes (a plausible real gap between shifts).
+- Root cause: a single clock-in action appears to write one row **per branch the employee has
+  access to** — confirmed to affect real, confirmed optometrists too (SA, MB both showed
+  multi-branch same-day clock records). Decision: abandon `CLOCKINOUT` for this metric.
+
+**Original two-layer ConnX denominator (2026-09-11):** Layer 1 multiplied a rostered headcount
+(`COUNT(*) * MAX(HoursPerDay)`) by working days instead of using a fixed branch constant; Layer 2's
+leave-capping logic was the same as today's. Name-matching between ConnX and Optomate was verified
+once by hand for 8 sampled employees, never re-verified in SQL.
+
+**METRICS-stage join fan-out bug (found and fixed 2026-09-11):** joining the un-rolled-up
+appointment fact table directly to the once-per-branch/day denominator and `SUM()`-ing inflated
+DUB's denominator to 9,590 hours instead of a few hundred. Fixed by rolling up to one row per
+branch/day before the join — this fix carried forward into the current design unchanged.
+
+**`USER_APP_ADJUST` Layer 3 (added, then removed, 2026-09-14 to 2026-09-15):** added to subtract
+confirmed no-show hours (`INACTIVE=1`) from the roster-headcount denominator. Investigating a
+resulting negative denominator at MAK (26 inactive hours against 14 theoretical hours) traced back
+to non-rostered `USER_IDENTIFIER`s (locums, and some entirely unrelated accounts) appearing in
+`USER_APP_ADJUST` with no corresponding roster capacity to subtract from. Attempts to fix this by
+filtering to only rostered names (via a ConnX-name ↔ Optomate-identifier join) surfaced further
+data problems — Liao, Pei-Chun's `USERS.BRANCH_IDENTIFIER` disagreed with her ConnX-rostered branch
+(MAK vs. ORA), Bemrose, Colin had no `BRANCH_IDENTIFIER` recorded at all — and ultimately led to
+business clarifying that the fixed-capacity model (above) was the correct mental model all along,
+making the entire `USER_APP_ADJUST` layer unnecessary.
+
+</details>
 
 ---
 
@@ -567,4 +600,4 @@ Git history for the commit that replaced it with the `ITEMCATEGORY` rule above).
 |---|---|---|---|
 | Script-to-Sale Conversion | Complete | **Written and tested** (`select_Script_To_Sale_Conversion.sql`, 6 commits) | Add Walk-In Sales summary rollup; add side-by-side date-window comparison; get business sign-off on the finished query/results |
 | Chair Utilisation | Complete | **Written and tested** (`select_Chair_Utilisation.sql`) — logic verified, results not usable until denominator is confirmed | Business: confirm `SlotsPerDay`/`MinutesPerSlot` per branch (placeholders 13/30 in use meanwhile) |
-| Optometrist Utilisation | Numerator complete; denominator source changed from `CLOCKINOUT` (ruled out) to ConnX | **Written and tested** (`select_Optometrist_Utilisation.sql`, `select_Clinical_Hours_Worked.sql`) — join-fan-out bug found and fixed, but output not yet trustworthy | Quantify locum/non-roster attendance gap (numerator includes everyone, denominator only 10 roster optometrists — biases utilisation upward, unmeasured); verify Cost Centre → `BRANCH_IDENTIFIER` mapping against real ConnX data; harden `HoursPerDay` formula before it can vary per person |
+| Optometrist Utilisation | Numerator complete; denominator redesigned 2026-09-15 to fixed branch capacity (business-confirmed), replacing the roster-headcount + `USER_APP_ADJUST` approach | **Written and tested** (`select_Optometrist_Utilisation.sql`, `select_Clinical_Hours_Worked.sql`) — optom/locum split added; fan-out bug and the negative-denominator/>100%-utilisation bugs found and fixed | Resolve Khou, Vincent's Optomate `USER_IDENTIFIER`; verify Cost Centre → `BRANCH_IDENTIFIER` mapping against real ConnX data; business review of the new fixed-capacity model and results |
