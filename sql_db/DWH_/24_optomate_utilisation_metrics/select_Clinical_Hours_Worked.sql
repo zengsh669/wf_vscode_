@@ -200,8 +200,14 @@ SELECT
     l1.Theoretical_Available_Hours,
     l1.Theoretical_Available_Hours - ISNULL(sh.Scheduled_Hours, 0)     AS Optom_Not_Scheduled_Hours,
     ISNULL(SUM(lv.LeaveHoursCapped), 0)                                AS Total_Leave_Hours,
-    l1.Theoretical_Available_Hours - ISNULL(SUM(lv.LeaveHoursCapped), 0)
-                                                                        AS Clinical_Hours_Worked
+    l1.Theoretical_Available_Hours                                     AS Clinical_Hours_Worked
+    -- Clinical_Hours_Worked = fixed branch capacity, full stop — NOT reduced
+    -- by leave (2026-09-15 fix, synced from select_Optometrist_Utilisation.sql).
+    -- Leave is covered by a locum, so branch capacity doesn't shrink; the
+    -- numerator counts locum-covered appointments too, so subtracting leave
+    -- from the denominator without adding locum hours back was pushing
+    -- Optometrist_Utilisation over 100% (e.g. MAK 211%). Optom_Not_Scheduled_Hours
+    -- / Total_Leave_Hours remain as visibility columns only — not subtracted here.
 FROM #Layer1_TheoreticalHours l1
 LEFT JOIN #ScheduledHoursByBranchDay sh
     ON sh.BranchIdentifier = l1.BranchIdentifier
