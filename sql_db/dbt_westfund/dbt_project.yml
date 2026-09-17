@@ -18,5 +18,9 @@ clean-targets:
 
 models:
   westfund_dwh:
-    sandbox:
+    staging:
+      +materialized: view
+    intermediate:
       +materialized: table
+    marts:
+      +materialized: view
