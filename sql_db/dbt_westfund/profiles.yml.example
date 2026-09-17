@@ -10,7 +10,7 @@ westfund_dwh:
     sandbox:
       type: sqlserver
       driver: 'ODBC Driver 17 for SQL Server'
-      server: rpsqlrp01
+      server: prdsql05.westfund.com.au
       database: SANDBOX
       schema: dbo
       port: 1433
@@ -26,7 +26,7 @@ westfund_dwh:
     # silver:
     #   type: sqlserver
     #   driver: 'ODBC Driver 17 for SQL Server'
-    #   server: rpsqlrp01
+    #   server: prdsql05.westfund.com.au
     #   database: SILVER
     #   schema: dbo
     #   port: 1433

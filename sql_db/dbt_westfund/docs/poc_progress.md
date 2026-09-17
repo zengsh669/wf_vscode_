@@ -1,6 +1,6 @@
 # dbt POC — Progress Notes
 
-Last updated: 2026-09-02
+Last updated: 2026-09-17
 
 ## Goal
 
@@ -9,10 +9,14 @@ table loads, primarily to solve manual dependency ordering in ADF. Secondary
 goal: auto-generated lineage. Scope narrows to only the Silver tables / Gold
 views that are actually used, using this migration as a cleanup opportunity.
 
-## Status: blocked on IT approval
+## Status: admin connection to Sandbox verified (2026-09-17)
 
-Local environment is fully ready. The only blocker is Sandbox database
-read/write access from VSCode — not yet requested/granted.
+Got an admin account (`shaun.adm`) from IT for SQL05 (the server hosting
+BRONZE/SILVER/GOLD/SANDBOX). `dbt debug` now connects successfully as
+`shaun.adm` against SANDBOX, and CREATE TABLE / INSERT / CREATE PROCEDURE /
+EXEC all tested successfully under that account. See "Multi-account /
+multi-machine setup notes" below for the connection troubleshooting details
+and what still needs replicating for a real VM deployment.
 
 ## Local environment — DONE
 
@@ -21,10 +25,89 @@ read/write access from VSCode — not yet requested/granted.
 - ODBC Driver 17 for SQL Server already present, no install needed
 - Project scaffold created: `dbt_project.yml`, `models/sandbox/` (empty),
   `profiles.yml.example`
-- `~/.dbt/profiles.yml` configured with placeholder credentials; `dbt debug`
-  confirmed config/driver/profile parsing all pass — only the actual network
-  connection fails (expected, since Sandbox access isn't granted yet)
-- Committed to git (local only, not yet pushed)
+- `~/.dbt/profiles.yml` configured; `dbt debug` now passes fully under the
+  `shaun.adm` admin account (see notes below)
+- Committed and pushed to GitHub (`wf_vscode_`)
+
+## Multi-account / multi-machine setup notes
+
+Two things that are NOT obvious and will need repeating for VM deployment:
+
+1. **`profiles.yml` belongs to the Windows account, not the project.**
+   dbt reads it from `C:\Users\<account>\.dbt\profiles.yml`. Since Windows
+   Authentication (`authentication: ActiveDirectoryIntegrated`) always uses
+   whoever is currently logged into that session, `zengsh` and `shaun.adm`
+   each need their own copy at their own path — copying the file isn't
+   enough on its own, each account's `.dbt` folder has to actually contain
+   one. Confirmed by running `dbt debug` as `shaun.adm` and getting
+   "profiles.yml file [ERROR not found]" until a copy was placed at
+   `C:\Users\shaun.adm\.dbt\profiles.yml`.
+2. **The server address matters more than expected.** `server: rpsqlrp01`
+   (short hostname) causes `dbt debug` to fail with `SSL Provider: The
+   target principal name is incorrect` — a Kerberos/SPN mismatch, not a
+   permissions issue. Switching to the FQDN `prdsql05.westfund.com.au`
+   (the same address used successfully in the SSMS/mssql extension
+   connection dialog) fixed it immediately. All three `profiles.yml`
+   copies (`zengsh`, `shaun.adm`, and the `profiles.yml.example` template)
+   now use the FQDN.
+3. **`.venv` cannot be copied between machines/accounts.** It has to be
+   rebuilt (`py -m venv .venv` + `pip install dbt-core dbt-sqlserver`) at
+   the new location — this will apply again when setting up the VM.
+4. **VM's `profiles.yml` will need real changes, not just a copy**: target
+   should point at `silver` (not `sandbox`), and the authentication method
+   for an unattended Task Scheduler job needs separate thought — Windows
+   Authentication as used here depends on an interactively logged-in
+   session, which won't exist when Task Scheduler triggers the job
+   unattended.
+
+## VM deployment checklist (not started — reference for when this stage begins)
+
+None of this is done yet. Listed here so it isn't re-derived from scratch
+later. VM setup mirrors the local setup steps above, but nothing gets
+copied across — each piece is reinstalled/reconfigured fresh on the VM:
+
+- [ ] Install Python on the VM (version compatible with dbt-sqlserver;
+      doesn't need to match the local 3.14 exactly)
+- [ ] Confirm ODBC Driver 17 (or 18) for SQL Server is present on the VM
+      (likely already there if the VM talks to SQL Server for anything else)
+- [ ] Build a fresh `.venv` on the VM: `python -m venv .venv` then
+      `pip install dbt-core dbt-sqlserver`
+- [ ] Deploy the project code (`models/`, `dbt_project.yml`, etc. — i.e.
+      whatever is git-tracked, since `.gitignore` already excludes
+      `.venv/`, `target/`, `dbt_packages/`, `logs/`) via the ADO Pipeline
+      from the ADO Repo, not manual copy
+- [ ] Write a VM-specific `profiles.yml` at
+      `C:\Users\<execution-account>\.dbt\profiles.yml` — NOT a copy of the
+      local one:
+      - `target: silver` (not `sandbox`)
+      - `database: SILVER`
+      - authentication method needs separate thought: Windows
+        Authentication (`ActiveDirectoryIntegrated`) depends on an
+        interactive login session, which won't exist when Task Scheduler
+        triggers the job unattended — need to confirm with IT how the
+        execution account authenticates non-interactively
+      - use the FQDN `prdsql05.westfund.com.au` for `server`, not the short
+        hostname (see setup notes above — short hostname causes a
+        Kerberos/SPN failure)
+- [ ] Write a `.bat` script that `cd`s into the project folder and runs
+      `.venv\Scripts\dbt.exe run` (and optionally `dbt test`)
+- [ ] Manually run the `.bat` once to confirm it works before automating it
+- [ ] Set up Windows Task Scheduler to trigger the `.bat` on a schedule,
+      running as the correct execution account
+- [ ] Decide on failure handling — Task Scheduler doesn't alert on failure
+      the way ADF does; need the `.bat` (or a wrapper script) to check
+      `dbt run`'s exit code / `target/run_results.json` and send an email
+      or log a failure somewhere visible
+- [ ] If any dbt packages get added later (e.g. `dbt_utils`, via
+      `packages.yml`), add a `dbt deps` step before `dbt run` — the
+      `dbt_packages/` folder isn't git-tracked, so it won't arrive with the
+      code deploy and has to be pulled fresh on the VM too. Not applicable
+      yet — no packages in use as of this writing.
+- [ ] `dbt debug` currently reports "git [ERROR]" under the `shaun.adm`
+      account (git isn't installed / not on PATH for that account). This
+      doesn't block `dbt run` or `dbt test` — only matters if `dbt deps`
+      ever needs to pull a package directly from a git URL. Install git for
+      the VM's execution account only if that need actually comes up.
 
 ## Planned deployment paths (not yet submitted to IT)
 
@@ -36,10 +119,11 @@ Repo → manual deploy to VM SQL Server (admin login) → ADF
 
 ## Next step
 
-Request Sandbox read/write access from IT, framed around collaboration
-efficiency / version control / CI, not dbt specifically (dbt can be
-mentioned if asked, not hidden). See conversation history for the reasoning
-on why this framing was chosen over a dbt-first pitch.
+Write the first real dbt model against SANDBOX using the admin VSCode
+window, and verify its output against the existing Silver table it's meant
+to replicate (using `Lib_Westfund`'s `compare_content`). Separately, VM
+deployment (see setup notes above) remains its own follow-on task once a
+model or two has been validated in Sandbox.
 
 ---
 
