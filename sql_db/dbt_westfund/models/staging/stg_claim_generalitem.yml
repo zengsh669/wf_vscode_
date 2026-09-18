@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: stg_claim_generalitem
+    description: ""
+    config:
+      alias: claim_generalitem
+    columns:
+      - name: claim_id
+        description: ""
+        tests: []
+      - name: claim_line_id
+        description: ""
+        tests: []
+      - name: service_type
+        description: ""
+        tests: []
+      - name: num_services
+        description: ""
+        tests: []
+      - name: fee
+        description: ""
+        tests: []
+      - name: benefit
+        description: ""
+        tests: []
+      - name: excess
+        description: ""
+        tests: []

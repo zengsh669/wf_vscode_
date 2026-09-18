@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: stg_product
+    description: ""
+    config:
+      alias: product
+    columns:
+      - name: product_id
+        description: ""
+        tests: []
+      - name: product_type
+        description: ""
+        tests: []
+      - name: product_code
+        description: ""
+        tests: []

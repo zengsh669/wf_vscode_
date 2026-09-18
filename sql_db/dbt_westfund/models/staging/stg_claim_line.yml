@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: stg_claim_line
+    description: ""
+    config:
+      alias: claim_line
+    columns:
+      - name: claim_id
+        description: ""
+        tests:
+          - not_null:
+              # where claim_id = 123
+              config:
+                severity: warn
+      - name: claim_line_id
+        description: ""
+        tests:
+          - unique:
+              config:
+                severity: warn
+      - name: provider_number_id
+        description: ""
+        tests: []
+      - name: episode_id
+        description: ""
+        tests: []
+      - name: claim_type
+        description: ""
+        tests:
+          - accepted_values:
+              values: ['A', 'B', 'M', 'H']
+              config:
+                severity: warn
+      - name: membership_id
+        description: ""
+        tests: []
+      - name: person_id
+        description: ""
+        tests: []
+        # tests:
+        #   - relationships:
+        #       to: ref('stg_person')
+        #       field: person_id
+        #       config:
+        #         severity: warn
+      - name: service_date
+        description: ""
+        tests: []
+      - name: claim_line_status_type
+        description: ""
+        tests: []
+      - name: status_date
+        description: ""
+        tests: []
+      - name: product_id
+        description: ""
+        tests: []

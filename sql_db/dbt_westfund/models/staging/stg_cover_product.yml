@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: stg_cover_product
+    description: ""
+    config:
+      alias: cover_product
+    columns:
+      - name: membership_id
+        description: ""
+        tests: []
+      - name: cover_version
+        description: ""
+        tests: []
+      - name: product_id
+        description: ""
+        tests: []

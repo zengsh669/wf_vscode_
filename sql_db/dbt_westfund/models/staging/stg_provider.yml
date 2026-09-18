@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: stg_provider
+    description: ""
+    config:
+      alias: provider
+    columns:
+      - name: provider_id
+        description: ""
+        tests: []
+      - name: provider_type
+        description: ""
+        tests: []

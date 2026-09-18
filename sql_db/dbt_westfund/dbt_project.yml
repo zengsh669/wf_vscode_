@@ -20,7 +20,10 @@ models:
   westfund_dwh:
     staging:
       +materialized: view
+      +schema: stg
     intermediate:
       +materialized: table
+      +schema: itm
     marts:
       +materialized: view
+      +schema: mart

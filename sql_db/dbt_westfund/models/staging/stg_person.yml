@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: stg_person
+    description: ""
+    config:
+      alias: person
+    columns:
+      - name: person_id
+        description: ""
+        tests: []
+      - name: date_of_birth
+        description: ""
+        tests: []

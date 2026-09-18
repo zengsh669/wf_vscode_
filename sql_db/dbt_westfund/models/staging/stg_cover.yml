@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: stg_cover
+    description: ""
+    config:
+      alias: cover
+    columns:
+      - name: membership_id
+        description: ""
+        tests: []
+      - name: cover_version
+        description: ""
+        tests: []
+      - name: cover_type
+        description: ""
+        tests: []
+      - name: cover_state
+        description: ""
+        tests: []
+      - name: cover_from_date
+        description: ""
+        tests: []
+      - name: termination_date
+        description: ""
+        tests: []
+      - name: description
+        description: ""
+        tests: []

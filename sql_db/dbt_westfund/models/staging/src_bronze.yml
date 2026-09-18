@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: BRONZE
+    schema: dbo
+    tables:
+      - name: claim_line
+      - name: claim_generalitem
+      - name: claim_hospitalitem
+      - name: person
+      - name: cover_product
+      - name: product
+      - name: cover
+      - name: provider_number
+      - name: provider

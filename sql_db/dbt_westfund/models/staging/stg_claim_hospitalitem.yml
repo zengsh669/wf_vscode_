@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_claim_hospitalitem
+    description: ""
+    config:
+      alias: claim_hospitalitem
+    columns:
+      - name: claim_id
+        description: ""
+        tests: []
+      - name: claim_line_id
+        description: ""
+        tests: []
+      - name: service_type
+        description: ""
+        tests: []
+      - name: num_services
+        description: ""
+        tests: []
+      - name: fee
+        description: ""
+        tests: []
+      - name: benefit
+        description: ""
+        tests: []
+      - name: excess
+        description: ""
+        tests: []
+      - name: num_beddays
+        description: ""
+        tests: []
+      - name: admission_date
+        description: ""
+        tests: []
+      - name: discharge_date
+        description: ""
+        tests: []
