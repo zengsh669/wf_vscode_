@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: mart_claim_aggr
+    description: ""
+    config:
+      alias: Claim_Aggr
+    columns:
+      - name: service_date
+        description: ""
+        tests: []
+      - name: paid_date
+        description: ""
+        tests: []
+      - name: claim_type
+        description: ""
+        tests: []
+      - name: service_type
+        description: ""
+        tests: []
+      - name: stay_type
+        description: ""
+        tests: []
+      - name: cover_state
+        description: ""
+        tests: []
+      - name: provider_type
+        description: ""
+        tests: []
+      - name: serv
+        description: ""
+        tests: []
+      - name: fee_amt
+        description: ""
+        tests: []
+      - name: benefit_amt
+        description: ""
+        tests: []
+      - name: gross_deficit
+        description: ""
+        tests: []
+      - name: product_id
+        description: ""
+        tests: []

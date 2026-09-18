@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: itm_claim_fact
+    description: ""
+    config:
+      alias: Claim_Fact
+    columns:
+      - name: claim_id
+        description: ""
+        tests: []
+      - name: claim_type
+        description: ""
+        tests: []
+      - name: membership_id
+        description: ""
+        tests: []
+      - name: person_id
+        description: ""
+        tests: []
+      - name: service_date
+        description: ""
+        tests: []
+      - name: status_date
+        description: ""
+        tests: []
+      - name: service_type
+        description: ""
+        tests: []
+      - name: stay_type
+        description: ""
+        tests: []
+      - name: serv
+        description: ""
+        tests: []
+      - name: fee_amt
+        description: ""
+        tests: []
+      - name: benefit_amt
+        description: ""
+        tests: []
+      - name: excess_amt
+        description: ""
+        tests: []
+      - name: bed_days
+        description: ""
+        tests: []
+      - name: cover_type
+        description: ""
+        tests: []
+      - name: cover_state
+        description: ""
+        tests: []
+      - name: product_id
+        description: ""
+        tests: []
+      - name: provider_number_id
+        description: ""
+        tests: []
+      - name: provider_type
+        description: ""
+        tests: []
+      - name: age_group
+        description: ""
+        tests: []
+      - name: gross_deficit
+        description: ""
+        tests: []
