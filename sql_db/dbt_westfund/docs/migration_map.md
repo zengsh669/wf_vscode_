@@ -22,27 +22,34 @@ a shared model's status changes.
 
 ## Shared staging models (source of truth for staging status)
 
+Naming settled on `stg_<bronze_table>` (no `bronze__` infix — staging is
+already understood to map 1:1 to Bronze).
+
 | Bronze table | dbt model | Status | Used by lines |
 |---|---|---|---|
-| claim_generalitem | stg_bronze__claim_generalitem | Not started | Line 1 |
-| claim_hospitalitem | stg_bronze__claim_hospitalitem | Not started | Line 1 |
-| claim_line | stg_bronze__claim_line | Not started | Line 1 |
-| cover | stg_bronze__cover | Not started | Line 1 |
-| cover_product | stg_bronze__cover_product | Not started | Line 1 |
-| person | stg_bronze__person | Not started | Line 1 |
-| product | stg_bronze__product | Not started | Line 1 |
-| provider | stg_bronze__provider | Not started | Line 1 |
-| provider_number | stg_bronze__provider_number | Not started | Line 1 |
+| claim_generalitem | stg_claim_generalitem | Verified in Sandbox | Line 1 |
+| claim_hospitalitem | stg_claim_hospitalitem | Verified in Sandbox | Line 1 |
+| claim_line | stg_claim_line | Verified in Sandbox | Line 1 |
+| cover | stg_cover | Verified in Sandbox | Line 1 |
+| cover_product | stg_cover_product | Verified in Sandbox | Line 1 |
+| person | stg_person | Verified in Sandbox | Line 1 |
+| product | stg_product | Verified in Sandbox | Line 1 |
+| provider | stg_provider | Verified in Sandbox | Line 1 |
+| provider_number | stg_provider_number | Verified in Sandbox | Line 1 |
+
+"Verified in Sandbox" here means: builds cleanly via `dbt build`, and
+`stg_claim_line` has data-quality tests attached (`claim_type`
+accepted_values, `claim_id` not_null, `claim_line_id` unique — all
+`severity: warn`, see notes below). The other 8 staging models have
+description/tests placeholders only. Row-by-row content comparison against
+Bronze (via `sql_db/dbt_westfund/tests/compare_sandbox_vs_prod.ipynb`) is
+in progress, not yet complete for all 9.
 
 ## Shared intermediate (Silver) models (source of truth for intermediate status)
 
-None built yet — empty until a line's Silver table also feeds another
-Silver table (Silver-to-Silver dependency), or the same intermediate model
-gets reused by more than one downstream Gold model.
-
 | Silver table | dbt model | Status | Used by lines / downstream models |
 |---|---|---|---|
-| *(none yet)* | | | |
+| Claim_Fact | itm_claim_fact | Verified in Sandbox | Line 1 |
 
 ## Line 1: Claim_Fact → Claim_Aggr
 
@@ -52,19 +59,20 @@ Bronze dependency.
 
 | Original SP/View | Source DB.Schema.Object | dbt model | Layer | Status |
 |---|---|---|---|---|
-| (n/a — source table) | BRONZE.dbo.claim_generalitem | stg_bronze__claim_generalitem | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.claim_hospitalitem | stg_bronze__claim_hospitalitem | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.claim_line | stg_bronze__claim_line | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.cover | stg_bronze__cover | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.cover_product | stg_bronze__cover_product | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.person | stg_bronze__person | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.product | stg_bronze__product | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.provider | stg_bronze__provider | staging | Not started |
-| (n/a — source table) | BRONZE.dbo.provider_number | stg_bronze__provider_number | staging | Not started |
-| Load_Claim_Fact | SILVER.dbo.Claim_Fact | claim_fact | intermediate | Not started |
-| (view) Claim_Aggr | GOLD.dbo.Claim_Aggr | claim_aggr | marts | Not started |
+| (n/a — source table) | BRONZE.dbo.claim_generalitem | stg_claim_generalitem | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.claim_hospitalitem | stg_claim_hospitalitem | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.claim_line | stg_claim_line | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.cover | stg_cover | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.cover_product | stg_cover_product | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.person | stg_person | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.product | stg_product | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.provider | stg_provider | staging | Verified in Sandbox |
+| (n/a — source table) | BRONZE.dbo.provider_number | stg_provider_number | staging | Verified in Sandbox |
+| Load_Claim_Fact | SILVER.dbo.Claim_Fact | itm_claim_fact (alias: `Claim_Fact`) | intermediate | Verified in Sandbox |
+| (view) Claim_Aggr | GOLD.dbo.Claim_Aggr | mart_claim_aggr (alias: `Claim_Aggr`) | marts | Verified in Sandbox |
 
-**11 models total** (9 staging, 1 intermediate, 1 marts) for this line.
+**11 models total** (9 staging, 1 intermediate, 1 marts) for this line —
+all 11 build successfully end-to-end via `dbt build --select staging+`.
 
 ### Notes for this line
 - Silver (`Claim_Fact`) only reads from the 9 Bronze staging models above —
@@ -73,3 +81,26 @@ Bronze dependency.
   dependency, so this is a clean textbook 3-layer chain (unlike the
   ClaimDetailsAtService_optimised → vw_Calculated_Deficit line considered
   earlier, where Gold reads Bronze directly).
+- Model aliases (`config.alias`) are set to match production object casing
+  (`Claim_Fact`, `Claim_Aggr`) — the dbt model/file names stay lowercase
+  per dbt convention, but the physical SQL Server objects match Silver/Gold
+  exactly. This was fixed after an initial mismatch was found by comparing
+  Sandbox vs. production object names directly (Sandbox originally had
+  lowercase `claim_fact` / `claim_aggr`).
+- `itm_claim_fact` takes ~8-9 minutes to build (510s in the most recent
+  run). Root cause: three repeated correlated subqueries against the
+  `member_details` CTE (translated faithfully from the original SP, not
+  yet optimised — see `poc_progress.md` for the performance investigation).
+  Staging materialization (view vs. table) was tested as a secondary
+  factor and is not the main driver.
+- `stg_claim_line.claim_line_id` unique test fails with 411 duplicates
+  (severity: warn, not error) — expected, since `claim_line` is a
+  line-level detail table; a true unique key would need to be a composite
+  of `claim_id` + `claim_line_id`. Kept as a warn-level test intentionally,
+  as a live demo of dbt's automated data-quality testing.
+- Row-by-row validation against production (`itm.Claim_Fact` vs.
+  `SILVER.dbo.Claim_Fact`, `mart.Claim_Aggr` vs. `GOLD.dbo.Claim_Aggr`) is
+  in progress via `sql_db/dbt_westfund/tests/compare_sandbox_vs_prod.ipynb`
+  — no primary key is defined on either object, so the comparison covers
+  column names, row counts, dtypes, null rates, numeric column sums, and
+  categorical value sets (not full row-level equality).

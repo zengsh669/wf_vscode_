@@ -1,6 +1,6 @@
 # dbt POC — Progress Notes
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 ## Goal
 
@@ -9,14 +9,16 @@ table loads, primarily to solve manual dependency ordering in ADF. Secondary
 goal: auto-generated lineage. Scope narrows to only the Silver tables / Gold
 views that are actually used, using this migration as a cleanup opportunity.
 
-## Status: admin connection to Sandbox verified (2026-09-17)
+## Status: full showcase line built and running end-to-end in Sandbox (2026-09-18)
 
-Got an admin account (`shaun.adm`) from IT for SQL05 (the server hosting
-BRONZE/SILVER/GOLD/SANDBOX). `dbt debug` now connects successfully as
-`shaun.adm` against SANDBOX, and CREATE TABLE / INSERT / CREATE PROCEDURE /
-EXEC all tested successfully under that account. See "Multi-account /
-multi-machine setup notes" below for the connection troubleshooting details
-and what still needs replicating for a real VM deployment.
+The complete Bronze → Silver → Gold showcase line (`Claim_Fact` →
+`Claim_Aggr`, see `migration_map.md` for the object-by-object mapping) now
+builds successfully via `dbt build --select staging+`: 9 staging models, 1
+intermediate model (`itm.Claim_Fact`), 1 marts model (`mart.Claim_Aggr`) —
+14 objects total (11 models + 3 data tests). Sandbox object casing was
+fixed to match production (`Claim_Fact`, `Claim_Aggr`, not lowercase).
+Row-by-row validation against production Silver/Gold is in progress (see
+"Next step").
 
 ## Local environment — DONE
 
@@ -117,13 +119,47 @@ copied across — each piece is reinstalled/reconfigured fresh on the VM:
 **SQL/SP path (fallback):** same start → point SQL at Silver → commit to ADO
 Repo → manual deploy to VM SQL Server (admin login) → ADF
 
+## Showcase line — what's built (2026-09-18)
+
+- All 9 staging models (`stg_*`), `itm_claim_fact` (alias `Claim_Fact`),
+  and `mart_claim_aggr` (alias `Claim_Aggr`) build cleanly end-to-end.
+  Latest full run: 515.70s (8m 35s), dominated by `itm_claim_fact` alone
+  (510s) — see `migration_map.md` for the performance root cause
+  (correlated subqueries carried over faithfully from the original SP).
+- `stg_claim_line` has real data-quality tests attached (accepted_values,
+  not_null, unique — all `severity: warn`); the `claim_line_id` unique
+  test intentionally fails with 411 duplicates as a live demo of dbt's
+  automated testing (see `migration_map.md` notes for why that's expected,
+  not a bug).
+- Sandbox object casing was found to not match production
+  (`itm.claim_fact`/`mart.claim_aggr` vs. `SILVER.dbo.Claim_Fact`/
+  `GOLD.dbo.Claim_Aggr`) after a manual visual check against SSMS
+  screenshots. Fixed via `config.alias` in both models' `.yml` files;
+  Sandbox objects dropped and rebuilt, now match production casing exactly.
+- Eyeballed row counts match production: `itm.Claim_Fact` /
+  `SILVER.dbo.Claim_Fact` both 2,764,900 rows; `mart.Claim_Aggr` /
+  `GOLD.dbo.Claim_Aggr` both 176,782 rows. Not yet a rigorous check — see
+  next step.
+
 ## Next step
 
-Write the first real dbt model against SANDBOX using the admin VSCode
-window, and verify its output against the existing Silver table it's meant
-to replicate (using `Lib_Westfund`'s `compare_content`). Separately, VM
-deployment (see setup notes above) remains its own follow-on task once a
-model or two has been validated in Sandbox.
+Real (not just eyeballed) validation of Sandbox output against production,
+using `sql_db/dbt_westfund/tests/compare_sandbox_vs_prod.ipynb`. Neither
+`itm.Claim_Fact` nor `mart.Claim_Aggr` has a defined primary key, so
+full row-level comparison (`Lib_Westfund`'s `compare_content`/`test_joins`,
+which require a pkey) isn't usable here. The notebook instead reuses
+`compare_columns` from `Lib_Westfund` and adds column-name-free checks
+that don't need row alignment: row counts, per-column dtypes, per-column
+null rates, numeric column sums, and categorical column value sets —
+config-driven via a `COMPARISONS` list (database/schema/table as
+variables) so it can be reused for future migration lines without editing
+the comparison logic. In progress, not yet run to completion against both
+`Claim_Fact` and `Claim_Aggr`.
+
+Separately, VM deployment (see setup notes above) remains its own
+follow-on task once validation above is complete — a `.bat` wrapper +
+Task Scheduler + failure-email approach was discussed but deliberately
+not started yet (needs the company's SMTP server details first).
 
 ---
 
